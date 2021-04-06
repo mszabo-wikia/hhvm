@@ -20,6 +20,7 @@
 
 #include "hphp/runtime/base/array-init.h"
 #include "hphp/runtime/base/struct-log-util.h"
+#include "hphp/runtime/base/runtime-error.h"
 #include "hphp/runtime/base/utf8-decode.h"
 #include "hphp/runtime/base/variable-serializer.h"
 #include "hphp/runtime/vm/bytecode.h"
@@ -220,6 +221,16 @@ TypedValue HHVM_FUNCTION(json_decode, const String& json,
   }
   if (ok) {
     return tvReturn(std::move(z));
+  } else if (!(parser_options & k_JSON_FB_LOOSE)) {
+    // @slack: if strict parsing didn't work, try with JSON_FB_LOOSE
+    // temporary for backwards compatibility with USE_JSONC which is very permissive
+    parser_options = parser_options | k_JSON_FB_LOOSE;
+    const auto loose_ok =
+      JSON_parser(z, json.data(), json.size(), assoc, depth, parser_options);
+    if (loose_ok) {
+      raise_notice("Slack json_decode patch - implicitly applied JSON_FB_LOOSE for more permissive parsing after json_decode failure");
+      return tvReturn(std::move(z));
+    }
   }
 
   String trimmed = HHVM_FN(trim)(json, "\t\n\r ");
@@ -285,8 +296,12 @@ TypedValue HHVM_FUNCTION(json_decode, const String& json,
     }
   }
 
-  if ((options & k_JSON_FB_LOOSE) && json.size() > 1 &&
+  // @slack: commented out section is a temporary patch
+  if (/*(options & k_JSON_FB_LOOSE) &&*/ json.size() > 1 &&
       ch0 == '\'' && json.charAt(json.size() - 1) == '\'') {
+    if (!(options & k_JSON_FB_LOOSE)) {
+      raise_notice("Slack json_decode patch - temporarily allowing single quoted json keys for JSON_C backwards compatibility");
+    }
     json_set_last_error_code(json_error_codes::JSON_ERROR_NONE);
     return tvReturn(json.substr(1, json.size() - 2));
   }

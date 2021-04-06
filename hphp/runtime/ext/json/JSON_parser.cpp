@@ -31,6 +31,7 @@ SOFTWARE.
 #include <folly/FBVector.h>
 
 #include "hphp/runtime/base/builtin-functions.h"
+#include "hphp/runtime/base/runtime-error.h"
 #include "hphp/runtime/base/collections.h"
 #include "hphp/runtime/base/request-info.h"
 #include "hphp/runtime/base/tv-refcount.h"
@@ -615,7 +616,8 @@ struct SimpleParser {
     auto const slice = folly::StringPiece(start, len);
     start[len] = '\0';
     int64_t num;
-    if (container_type != JSONContainerType::HACK_ARRAYS &&
+    if (false && // @slack: this preserves a backwards compatible behavior with JSON_C which never has int keys
+        container_type != JSONContainerType::HACK_ARRAYS &&
         is_strictly_integer(start, len, num)) {
       pushInt64(num);
     } else if (auto const str = lookupStaticString(slice)) {
@@ -1150,7 +1152,8 @@ static void object_set(const json_parser* json,
       forceToDict(var).set(key, value);
     } else {
       int64_t i;
-      if (key.get()->isStrictlyInteger(i)) {
+      // @slack: this preserves a backwards compatible behavior with JSON_C which never has int keys
+      if (false && key.get()->isStrictlyInteger(i)) {
         forceToDict(var).set(i, value);
       } else {
         forceToDict(var).set(key, value);
@@ -1322,7 +1325,16 @@ bool JSON_parser(Variant &z, const char *p, int length, bool const assoc,
     b = decoder.decode();
     // Fast-case most common transition: append a simple string character.
     if (state == 3 && type == KindOfString) {
-      while (b != '\"' &&  b != '\\' && b != '\'' && b <= 127 && b >= ' ') {
+      while (b != '\"' &&  b != '\\' && b != '\'' && b <= 127 && (b >= ' ' || b == '\n' || b == '\t')) {
+        // @slack temporary patch to remove USE_JSONC
+        if (b == '\n') {
+          raise_notice("Slack json_decode patch - temporarily allowing newline in json for backwards compatibility");
+        }
+
+        // @slack temporary patch to remove USE_JSONC
+        if (b == '\t') {
+          raise_notice("Slack json_decode patch - temporarily allowing tab in json for backwards compatibility");
+        }
         buf->append((char)b);
         b = decoder.decode();
       }
