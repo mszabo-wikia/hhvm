@@ -1199,7 +1199,9 @@ JSONContainerType get_container_type_from_options(int64_t options) {
     return JSONContainerType::DARRAYS_AND_VARRAYS;
   }
 
-  return JSONContainerType::DARRAYS;
+  // @slack patch: defaulting to DARRAYS_AND_VARRAYS makes darray/varray specialization easier
+  return JSONContainerType::DARRAYS_AND_VARRAYS;
+  // return JSONContainerType::DARRAYS;
 }
 
 /**
