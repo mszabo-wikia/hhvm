@@ -1,6 +1,6 @@
 include(HHVMExtensionConfig)
 
-set(RECURSIVE_SOURCE_SUBDIRS base debugger eval server vm)
+set(RECURSIVE_SOURCE_SUBDIRS base debugger eval server vm slack)
 foreach (dir ${RECURSIVE_SOURCE_SUBDIRS})
   HHVM_SELECT_SOURCES("${CMAKE_CURRENT_SOURCE_DIR}/${dir}")
 endforeach(dir ${RECURSIVE_SOURCE_SUBDIRS})
