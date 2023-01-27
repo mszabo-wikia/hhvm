@@ -17,6 +17,7 @@
 #pragma once
 
 #include "hphp/runtime/server/transport.h"
+#include "hphp/runtime/server/proxygen/proxygen-connection-stats.h"
 #include <algorithm>
 #include <memory>
 #include "hphp/util/logger.h"
@@ -248,6 +249,7 @@ struct ProxygenTransport final
     {
       Lock lock(this);
       m_clientTxn = txn;
+      m_clientTxn->setTransportCallback(&m_connectionStats);
     }
     m_clientTxn->getPeerAddress(m_clientAddress);
     folly::SocketAddress localAddr;
@@ -328,6 +330,10 @@ struct ProxygenTransport final
   void removePushTxn(uint64_t id) {
     Lock lock(this);
     m_pushHandlers.erase(id);
+  }
+
+  ProxygenConnectionStats* connectionStats() {
+    return &m_connectionStats;
   }
 
   void setEnqueued() {
@@ -415,6 +421,8 @@ struct ProxygenTransport final
   std::shared_ptr<stream_transport::HttpStreamServerTransport>
     m_streamTransport;
   folly::ssl::X509UniquePtr m_peerCert{nullptr};
+  ProxygenConnectionStats m_connectionStats;
+
  public:
   // List of ProxygenTransport not yet handed to the server will sit
   // in a list, so that we can abort them if they take too long.

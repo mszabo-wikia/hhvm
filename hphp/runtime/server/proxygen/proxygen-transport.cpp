@@ -93,6 +93,7 @@ struct PushTxnHandler : proxygen::HTTPPushTransactionHandler {
         return nullptr;
       }
       m_pushTxn = clientTxn->newPushedTransaction(this);
+      m_pushTxn->setTransportCallback(m_transport->connectionStats());
       *msg = &m_pushPromise;
     } else {
       if (m_egressError) {
@@ -332,8 +333,9 @@ void ProxygenTransport::onBody(std::unique_ptr<folly::IOBuf> chain) noexcept {
   // before just sending an abort. This gives the client an opportunity to
   // process the response before receiving some form of a reset caused by the
   // abort.
+  size_t dataLength = chain->computeChainDataLength();
   if (m_sendEnded && m_clientTxn->isEgressComplete()) {
-    m_bodyLengthPastLimit -= chain->computeChainDataLength();
+    m_bodyLengthPastLimit -= dataLength;
     if (m_bodyLengthPastLimit <= 0) {
       Logger::Warning("Received body after a response has completed, aborting");
       abort();
@@ -342,8 +344,8 @@ void ProxygenTransport::onBody(std::unique_ptr<folly::IOBuf> chain) noexcept {
   }
 
   VLOG(4) << *m_clientTxn << "Recevied body len="
-          << chain->computeChainDataLength();
-  m_requestBodyLength += chain->computeChainDataLength();
+          << dataLength;
+  m_requestBodyLength += dataLength;
 
   if (m_maxPost >= 0 && m_requestBodyLength > m_maxPost &&
       !isStreamTransport()) {
