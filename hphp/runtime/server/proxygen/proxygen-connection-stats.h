@@ -30,7 +30,7 @@ const int kMinDurationMs = 0;
 // which impacts the tail end of our latency distribution (P90, P99).
 // Thus it is better to use a high value for this counter.
 // See https://github.com/facebook/folly/blob/main/folly/docs/Histogram.md#histogram
-const int kMaxDurationMs = 5000;
+const int kMaxDurationMs = 30000;
 const int kBucketSizeMs = 5;
 }
 
