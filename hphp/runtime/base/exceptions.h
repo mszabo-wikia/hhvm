@@ -137,6 +137,13 @@ struct RequestMemoryExceededException : ResourceExceededException {
   EXCEPTION_COMMON_IMPL(RequestMemoryExceededException)
 };
 
+struct RequestCancelledException : FatalErrorException {
+  RequestCancelledException(const std::string& msg, const Array& backtrace)
+    : FatalErrorException(msg, backtrace)
+  {}
+  EXCEPTION_COMMON_IMPL(RequestCancelledException);
+};
+
 struct RequestOOMKilledException : ResourceExceededException {
   explicit RequestOOMKilledException(size_t usedBytes)
     : ResourceExceededException(

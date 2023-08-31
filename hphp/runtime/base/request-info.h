@@ -58,6 +58,7 @@ struct RequestInfo {
 
   static void GetExecutionSamples(std::map<Executing, int>& counts);
   static void ExecutePerRequest(std::function<void(RequestInfo*)> f);
+  static void ExecuteForRequestIfExists(RequestInfo* info, std::function<void(RequestInfo*)> f);
 
   /*
    * Send POSIX signal to all worker threads.

@@ -44,6 +44,8 @@ namespace {
   <<__PHPStdLib>>
   function xbox_task_start(string $message): resource;
   <<__PHPStdLib>>
+  function xbox_task_cancel(resource $task): void;
+  <<__PHPStdLib>>
   function xbox_task_status(resource $task): bool;
   <<__PHPStdLib>>
   function xbox_task_result(

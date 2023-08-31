@@ -45,6 +45,8 @@ String HHVM_FUNCTION(pagelet_server_task_result,
                      int64_t timeout_ms);
 OptResource HHVM_FUNCTION(xbox_task_start,
                        const String& message);
+void HHVM_FUNCTION(xbox_task_cancel,
+                   const OptResource& task);
 bool HHVM_FUNCTION(xbox_task_status,
                    const OptResource& task);
 int64_t HHVM_FUNCTION(xbox_task_result,

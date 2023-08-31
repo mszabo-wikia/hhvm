@@ -8,3 +8,5 @@ Maintains a running list of github.com/facebook/hhvm commits cherry-picked into 
 | none | 3d1ce05c2eff069c6a96700fb75f1e0c312d514d is a Slack patch necessary to build our extensions. The CXX bridge used to reference Rust code in C++ is difficult to make work in extension builds, and those extensions import runtime-option.h. By referencing the codegen results of CXX instead of the source, we're able to import that file and build our extensions. |
 | none | 8d00c3f0d5e1cb09ff7834f4363a20bd3b116bc3 is a Slack patch necessary to add an AdminServer endpoint that exposes all internal counters. It is needed for our observability inside HHVM and its extensions (EscapeHatch). |
 | none | PR #21 is a Slack patch necessary to add missing metrics to the Proxygen server. |
+| none | PR #43 is a Slack patch to copy the optional hh_fanout tool to the built binaries, which is used for generating saved states for hh_client. |
+| none | PR #44 is a Slack path that adds `xbox_task_cancel` (needed for our JobQueue). |

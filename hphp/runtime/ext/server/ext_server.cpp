@@ -129,6 +129,11 @@ OptResource HHVM_FUNCTION(xbox_task_start,
   return XboxServer::TaskStart(message);
 }
 
+void HHVM_FUNCTION(xbox_task_cancel,
+                   const OptResource& task) {
+  return XboxServer::TaskCancel(task);
+}
+
 bool HHVM_FUNCTION(xbox_task_status,
                    const OptResource& task) {
   return XboxServer::TaskStatus(task);
@@ -231,6 +236,7 @@ void ServerExtension::moduleRegisterNative() {
   HHVM_FE(pagelet_server_flush);
   HHVM_FE(pagelet_server_is_done);
   HHVM_FE(xbox_task_start);
+  HHVM_FE(xbox_task_cancel);
   HHVM_FE(xbox_task_status);
   HHVM_FE(xbox_task_result);
   HHVM_FE(xbox_process_call_message);

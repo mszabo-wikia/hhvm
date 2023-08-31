@@ -115,6 +115,19 @@ function pagelet_server_is_done(): bool;
 function xbox_task_start(string $message): resource;
 
 /**
+ * Indicates to the runtime that a local xbox task should be terminated as soon
+ * as possible (i.e. whenever surprise flags are next checked). This function does
+ * nothing if the task hasn't yet started executing its HHVM code, but is safe to
+ * call multiple times. It's also safe to call if the task has already completed
+ * and will do nothing in that case.
+ *
+ * @param resource $task - The xbox task object created by xbox_task_start().
+ *
+ */
+<<__Native>>
+function xbox_task_cancel(resource $task): void;
+
+/**
  * Checks an xbox task's status.
  *
  * @param resource $task - The xbox task object created by xbox_task_start().

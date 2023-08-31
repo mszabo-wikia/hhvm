@@ -39,7 +39,7 @@ using std::string;
 
 XboxTransport::XboxTransport(const folly::StringPiece message,
                              const folly::StringPiece reqInitDoc /* = "" */)
-    : m_refCount(0), m_done(false), m_code(0), m_event(nullptr) {
+    : m_refCount(0), m_done(false), m_code(0), m_event(nullptr), m_requestInfoKey(nullptr) {
   Timer::GetMonotonicTime(m_queueTime);
 
   m_message.append(message.data(), message.size());
@@ -81,6 +81,18 @@ void XboxTransport::onSendEndImpl() {
     m_event->finish();
   }
   notify();
+}
+
+void XboxTransport::setRequestInfoKey(RequestInfo *request_info) {
+  Lock lock(this);
+  m_requestInfoKey = request_info;
+}
+
+void XboxTransport::cancel() {
+  Lock lock(this);
+  RequestInfo::ExecuteForRequestIfExists(m_requestInfoKey, [] (RequestInfo* info) {
+    info->m_reqInjectionData.triggerTimeout(TimeoutManual);
+  });
 }
 
 String XboxTransport::getResults(int &code, int timeout_ms /* = 0 */) {
@@ -131,7 +143,7 @@ struct XboxWorker
       // a custom initial document, make sure we do a reset
       string reqInitDoc = job->getHeader("ReqInitDoc");
       *s_xbox_prev_req_init_doc = reqInitDoc;
-
+      job->setRequestInfoKey(RequestInfo::s_requestInfo.getNoCheck());
       job->onRequestStart(job->getStartTimer());
 
       auto const handler = createRequestHandler();
@@ -332,6 +344,10 @@ OptResource XboxServer::TaskStart(const String& msg,
 
   throw_exception(SystemLib::AllocExceptionObject(errMsg));
   return OptResource();
+}
+
+void XboxServer::TaskCancel(const OptResource& task) {
+  cast<XboxTask>(task)->getJob()->cancel();
 }
 
 bool XboxServer::TaskStatus(const OptResource& task) {

@@ -76,7 +76,8 @@ enum TimeoutKindFlag : uint8_t {
   TimeoutNone          = 0,
   TimeoutTime          = 1ull << 1,
   TimeoutCPUTime       = 1ull << 2,
-  TimeoutSoft          = 1ull << 3
+  TimeoutSoft          = 1ull << 3,
+  TimeoutManual        = 1ull << 4
 };
 
 /*

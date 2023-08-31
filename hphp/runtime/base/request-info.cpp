@@ -95,6 +95,14 @@ void RequestInfo::ExecutePerRequest(std::function<void(RequestInfo*)> f) {
   }
 }
 
+void RequestInfo::ExecuteForRequestIfExists(RequestInfo* info, std::function<void(RequestInfo*)> f) {
+  Lock lock(s_request_info_mutex);
+  auto found = s_request_infos.find(info);
+  if (found != s_request_infos.end()) {
+    f(*found);
+  }
+}
+
 void RequestInfo::BroadcastSignal(int signo) {
   ExecutePerRequest([signo] (RequestInfo* t) {
       t->m_reqInjectionData.sendSignal(signo);
@@ -237,6 +245,16 @@ static Exception* generate_memory_exceeded_exception(c_WaitableWaitHandle* wh) {
   return new RequestMemoryExceededException(exceptionMsg, exceptionStack);
 }
 
+static Exception* generate_request_cancelled_exception(c_WaitableWaitHandle* wh) {
+  auto exceptionStack = createBacktrace(BacktraceArgs()
+                                        .fromWaitHandle(wh)
+                                        .withSelf()
+                                        .withThis()
+                                        .withMetadata());
+  return new RequestCancelledException(
+    "request has been cancelled", exceptionStack);
+}
+
 static Exception* generate_cli_client_terminated_exception(
   c_WaitableWaitHandle* wh
 ) {
@@ -311,6 +329,15 @@ size_t handle_request_surprise(c_WaitableWaitHandle* wh, size_t mask) {
         } else {
           flags += TimedOutFlag;
         }
+      }
+    }
+    
+    // Allow manual request cancellation even in a debugger
+    if (p.checkTimeoutKind(TimeoutManual)) {
+      if (pendingException) {
+        setSurpriseFlag(TimedOutFlag);
+      } else {
+        pendingException = generate_request_cancelled_exception(wh);
       }
     }
   }

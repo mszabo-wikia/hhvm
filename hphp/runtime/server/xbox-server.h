@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "hphp/runtime/base/request-info.h"
 #include "hphp/runtime/base/runtime-option.h"
 #include "hphp/runtime/base/type-string.h"
 #include "hphp/runtime/server/cli-server.h"
@@ -47,6 +48,7 @@ public:
    */
   static OptResource TaskStart(const String& msg, const String& reqInitDoc = "",
       ServerTaskEvent<XboxServer, XboxTransport> *event = nullptr);
+  static void TaskCancel(const OptResource& task);
   static bool TaskStatus(const OptResource& task);
   static int TaskResult(const OptResource& task, int timeout_ms, Variant *ret);
   static int TaskResult(XboxTransport* const job, int timeout_ms, Variant *ret);
@@ -128,6 +130,7 @@ struct XboxTransport final : Transport, Synchronizable {
    * Task interface.
    */
   bool isDone() { return m_done; }
+  void cancel();
   String getResults(int &code, int timeout_ms = 0);
 
   void setHost(const std::string &host) { m_host = host;}
@@ -145,6 +148,8 @@ struct XboxTransport final : Transport, Synchronizable {
       delete this;
     }
   }
+
+  void setRequestInfoKey(RequestInfo *request_info);
 
   void setCliContext(CLIContext&& ctx) {
     m_cli.emplace(std::move(ctx));
@@ -166,6 +171,15 @@ private:
 
   // points to an event with an attached waithandle from a different request
   ServerTaskEvent<XboxServer, XboxTransport> *m_event;
+
+  /**
+   * A key into the static request info set (containing request info for every request),
+   * which happens to be indexed by RequestInfo* - we never dereference this pointer
+   * directly so there's no ownership issue with storing this pointer. This request
+   * info key is used for xbox task cancel functionality to request that a task stops
+   * running via setting a surprise flag in that task's request info.
+   */
+  RequestInfo *m_requestInfoKey{nullptr};
 };
 
 ///////////////////////////////////////////////////////////////////////////////
