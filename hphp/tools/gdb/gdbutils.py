@@ -18,6 +18,11 @@ import types
 import gdb
 
 # ------------------------------------------------------------------------------
+# Pull the libstd++ helpers instead of hacking our way through.
+# If you're looking for them, they come from GCC.
+from libstdcxx.v6.printers import unique_ptr_get
+
+#------------------------------------------------------------------------------
 # Memoization.
 
 _all_caches = []

@@ -97,6 +97,10 @@ def php_line_number(func, pc):
         line: int.
     """
     shared = rawptr(func["m_shared"])
+    # TODO: This is a temporary workaround that doesn't work with LowPtr.
+    # This should be close to what we need under LowPtr (but we should switch to LLDB, really):
+    # shared = rawptr(shared.cast(T('HPHP::LowPtr<HPHP::Func::SharedData>')))
+    shared = shared.cast(T("HPHP::Func::SharedData").pointer())
     line_map = shared["m_lineMap"]["val"]
 
     if line_map is not None:
@@ -177,6 +181,7 @@ def create_php(idx, ar, rip="0x????????", pc=None):
     """
     func = lookup_func_from_fp(ar)  # gdb.Value[HPHP::Func*]
     shared = rawptr(func["m_shared"])  # gdb.Value[HPHP::SharedData]
+    shared = shared.cast(T("HPHP::Func::SharedData").pointer())
     flags = shared["m_allFlags"]  # gdb.Value[HPHP::Func::SharedData::Flags]
 
     # Pull the function name.
@@ -304,6 +309,7 @@ class JittedFrameDecorator(gdb.FrameDecorator.FrameDecorator):
         try:
             func = lookup_func_from_fp(self.ar)
             shared = rawptr(func["m_shared"])
+            shared = shared.cast(T("HPHP::Func::SharedData").pointer())
             argptr = self.ar.cast(T("HPHP::TypedValue").pointer())
             nargs = func["m_paramCounts"] >> 1
             if nargs > 64:
@@ -327,6 +333,7 @@ class JittedFrameDecorator(gdb.FrameDecorator.FrameDecorator):
         try:
             func = lookup_func_from_fp(self.ar)
             shared = rawptr(func["m_shared"])
+            shared = shared.cast(T("HPHP::Func::SharedData").pointer())
             flags = shared["m_allFlags"]
 
             if not flags["m_isClosureBody"]:
@@ -362,7 +369,8 @@ class JittedFrameDecorator(gdb.FrameDecorator.FrameDecorator):
             )
             func = lookup_func_from_fp(self.ar)
             shared = rawptr(func["m_shared"])
-            pc = shared["m_base"] + (inner_ar["m_callOffAndFlags"] >> 2)
+            shared = shared.cast(T("HPHP::Func::SharedData").pointer())
+            pc = rawptr(shared["m_bc"]) + (inner_ar["m_callOffAndFlags"] >> 2)
             return php_line_number(func, pc)
         except:
             return None
@@ -376,6 +384,7 @@ class JittedFrameDecorator(gdb.FrameDecorator.FrameDecorator):
             argptr = self.ar.cast(T("HPHP::TypedValue").pointer())
             nargs = func["m_paramCounts"] >> 1
             shared = rawptr(func["m_shared"])
+            shared = shared.cast(T("HPHP::Func::SharedData").pointer())
             num_loc = shared["m_numLocals"]
             if num_loc < nargs or num_loc - nargs > 64:
                 return None
