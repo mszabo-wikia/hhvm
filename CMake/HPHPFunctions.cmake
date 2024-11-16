@@ -385,7 +385,7 @@ endfunction()
 
 function(parse_version PREFIX VERSION)
   if (NOT ${VERSION} MATCHES "^[0-9]+\\.[0-9]+(\\.[0-9]+)?(-.+)?$")
-    message(FATAL_ERROR "VERSION must conform to X.Y(.Z)?(-.+)?")
+    message(FATAL_ERROR "VERSION must conform to X.Y(.Z)?(-.+)? but got ${VERSION}")
   endif()
 
   string(FIND ${VERSION} "-" SUFFIX_POS)
