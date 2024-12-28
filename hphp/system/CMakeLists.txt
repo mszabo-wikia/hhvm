@@ -1,6 +1,7 @@
 set(CXX_SOURCES "systemlib.cpp")
 
 add_library(hphp_system STATIC ${CXX_SOURCES})
+add_dependencies(hphp_system runtime_configs)
 target_link_libraries(hphp_system hphp_util proxygen hhvm_base_headers)
 
 auto_sources(files "*.h" "${CMAKE_CURRENT_SOURCE_DIR}")

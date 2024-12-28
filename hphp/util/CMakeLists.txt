@@ -53,7 +53,59 @@ if(MSVC)
   list(REMOVE_ITEM HEADER_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/light-process.h")
 endif()
 
-add_library(hphp_util STATIC ${CXX_SOURCES} ${ASM_SOURCES} ${HEADER_SOURCES})
+get_target_property(CARGO_EXE cargo LOCATION)
+get_target_property(RUSTC_EXE rustc LOCATION)
+
+set(
+    SERVER_CONFIG_SECTIONS
+    adminserver
+    autoload
+    codecache
+    debug
+    debugger
+    errorhandling
+    eval
+    gc
+    hacklang
+    hhir
+    http
+    jit
+    log
+    mail
+    pageletserver
+    pcre
+    php7
+    proxy
+    repo
+    sandbox
+    server
+    setprofile
+    simplexml
+    stats
+    strobelight
+    watchman
+    xbox
+    xenon
+)
+
+foreach(SECTION ${SERVER_CONFIG_SECTIONS})
+  list(APPEND SERVER_CONFIG_SOURCES ${CMAKE_BINARY_DIR}/hphp/util/configs/${SECTION}.cpp)
+  list(APPEND SERVER_CONFIG_HEADERS ${CMAKE_BINARY_DIR}/hphp/util/configs/${SECTION}.h)
+endforeach()
+
+add_custom_command(
+    OUTPUT ${SERVER_CONFIG_SOURCES} ${SERVER_CONFIG_HEADERS}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/hphp/util/configs &&
+    ${CMAKE_COMMAND} -E env RUSTC=${RUSTC_EXE} ${CARGO_EXE} run --quiet -- defs ${CMAKE_BINARY_DIR}/hphp/util/configs ${CMAKE_SOURCE_DIR}/hphp/doc/configs.specification
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/hphp/tools/configs
+    DEPENDS ${CMAKE_SOURCE_DIR}/hphp/doc/configs.specification rustc cargo
+    VERBATIM
+)
+
+add_custom_target(hhvm_server_configs DEPENDS ${SERVER_CONFIG_SOURCES} ${SERVER_CONFIG_HEADERS})
+
+add_library(hphp_util STATIC ${CXX_SOURCES} ${ASM_SOURCES} ${SERVER_CONFIG_SOURCES} ${HEADER_SOURCES} ${SERVER_CONFIG_HEADERS})
+add_dependencies(hphp_util hhvm_server_configs)
 auto_source_group("hphp_util" "${CMAKE_CURRENT_SOURCE_DIR}"
   ${ASM_SOURCES} ${CXX_SOURCES} ${HEADER_SOURCES})
 if (ENABLE_COTIRE)
