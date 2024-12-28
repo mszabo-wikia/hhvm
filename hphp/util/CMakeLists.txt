@@ -53,7 +53,52 @@ if(MSVC)
   list(REMOVE_ITEM HEADER_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/light-process.h")
 endif()
 
+get_target_property(CARGO_EXE cargo LOCATION)
+get_target_property(RUSTC_EXE rustc LOCATION)
+
 add_library(hphp_util STATIC ${CXX_SOURCES} ${ASM_SOURCES} ${HEADER_SOURCES})
+
+set(
+    SERVER_CONFIG_SECTIONS
+    adminserver
+    autoload
+    codecache
+    debug
+    debugger
+    errorhandling
+    eval
+    gc
+    hacklang
+    hhir
+    http
+    jit
+    log
+    mail
+    pageletserver
+    pcre
+    php7
+    proxy
+    repo
+    sandbox
+    server
+    setprofile
+    simplexml
+    stats
+    strobelight
+    watchman
+    xbox
+    xenon
+)
+
+include(HHVMRenderConfigSpecification)
+
+HHVM_RENDER_CONFIG_SPECIFICATION(
+    hphp_util
+    CONFIG_SECTIONS ${SERVER_CONFIG_SECTIONS}
+    TYPE defs
+    OUTPUT_PATH ${CMAKE_CURRENT_BINARY_DIR}/configs
+)
+
 auto_source_group("hphp_util" "${CMAKE_CURRENT_SOURCE_DIR}"
   ${ASM_SOURCES} ${CXX_SOURCES} ${HEADER_SOURCES})
 if (ENABLE_COTIRE)

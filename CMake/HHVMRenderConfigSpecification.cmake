@@ -1,0 +1,26 @@
+function (HHVM_RENDER_CONFIG_SPECIFICATION TARGET)
+    cmake_parse_arguments("HHVM_RENDER_CONFIG_SPEC" "" "TYPE;OUTPUT_PATH" "CONFIG_SECTIONS" ${ARGN})
+
+    get_target_property(CARGO_EXE cargo LOCATION)
+    get_target_property(RUSTC_EXE rustc LOCATION)
+
+    foreach(SECTION ${HHVM_RENDER_CONFIG_SPEC_CONFIG_SECTIONS})
+        list(APPEND HHVM_RENDER_CONFIG_SPEC_CONFIG_SOURCES ${HHVM_RENDER_CONFIG_SPEC_OUTPUT_PATH}/${SECTION}.cpp)
+        list(APPEND HHVM_RENDER_CONFIG_SPEC_CONFIG_HEADERS ${HHVM_RENDER_CONFIG_SPEC_OUTPUT_PATH}/${SECTION}.h)
+    endforeach()
+
+    add_custom_command(
+        OUTPUT ${HHVM_RENDER_CONFIG_SPEC_CONFIG_SOURCES} ${HHVM_RENDER_CONFIG_SPEC_CONFIG_HEADERS}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${HHVM_RENDER_CONFIG_SPEC_OUTPUT_PATH} &&
+        ${CMAKE_COMMAND} -E env RUSTC=${RUSTC_EXE} ${CARGO_EXE} run --quiet -- ${HHVM_RENDER_CONFIG_SPEC_TYPE} ${HHVM_RENDER_CONFIG_SPEC_OUTPUT_PATH} ${CMAKE_SOURCE_DIR}/hphp/doc/configs.specification
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/hphp/tools/configs
+        DEPENDS ${CMAKE_SOURCE_DIR}/hphp/doc/configs.specification rustc cargo
+        VERBATIM
+    )
+
+    add_custom_target(hhvm_render_config_section_${HHVM_RENDER_CONFIG_SPEC_TYPE}
+        DEPENDS ${HHVM_RENDER_CONFIG_SPEC_CONFIG_SOURCES} ${HHVM_RENDER_CONFIG_SPEC_CONFIG_HEADERS})
+
+    add_dependencies(${TARGET} hhvm_render_config_section_${HHVM_RENDER_CONFIG_SPEC_TYPE})
+    target_sources(${TARGET} PRIVATE ${HHVM_RENDER_CONFIG_SPEC_CONFIG_SOURCES})
+endfunction(HHVMRenderConfigSpecification)

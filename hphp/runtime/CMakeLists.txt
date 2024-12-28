@@ -45,11 +45,53 @@ add_object_library(hphp_runtime_static
             "${CMAKE_CURRENT_BINARY_DIR}/ir-opcode-generated.h")
 auto_source_group("hphp_runtime_static" "${CMAKE_CURRENT_SOURCE_DIR}"
   ${ASM_SOURCES} ${C_SOURCES} ${CXX_SOURCES} ${HEADER_SOURCES})
+
+
+set(LOADER_CONFIG_SECTIONS
+    adminserver-loader
+    autoload-loader
+    codecache-loader
+    configs-generated
+    debugger-loader
+    debug-loader
+    errorhandling-loader
+    eval-loader
+    gc-loader
+    hacklang-loader
+    hhir-loader
+    http-loader
+    jit-loader
+    log-loader
+    mail-loader
+    pageletserver-loader
+    pcre-loader
+    php7-loader
+    proxy-loader
+    repo-loader
+    sandbox-loader
+    server-loader
+    setprofile-loader
+    simplexml-loader
+    stats-loader
+    strobelight-loader
+    watchman-loader
+    xbox-loader
+    xenon-loader
+)
+
+include(HHVMRenderConfigSpecification)
+HHVM_RENDER_CONFIG_SPECIFICATION(
+  hphp_runtime_static
+  CONFIG_SECTIONS ${LOADER_CONFIG_SECTIONS}
+  TYPE loader
+  OUTPUT_PATH ${CMAKE_CURRENT_BINARY_DIR}/base/configs
+)
+
 SET_TARGET_PROPERTIES(hphp_runtime_static PROPERTIES OUTPUT_NAME "hphp_runtime")
 SET_TARGET_PROPERTIES(hphp_runtime_static PROPERTIES PREFIX "lib")
 SET_TARGET_PROPERTIES(hphp_runtime_static PROPERTIES CLEAN_DIRECT_OUTPUT 1)
 object_library_hphp_link(hphp_runtime_static)
-object_library_ld_link_libraries(hphp_runtime_static hphp_util proxygen vixl hphp_zend hphp_system jit_sort hphp_system)
+object_library_ld_link_libraries(hphp_runtime_static hphp_util proxygen mvfst vixl hphp_zend hphp_system jit_sort hphp_system)
 HHVM_CONFIGURE_TARGET_FOR_EXTENSION_DEPENDENCIES(hphp_runtime_static)
 
 HHVM_PUBLIC_HEADERS(runtime ${HEADER_SOURCES})
