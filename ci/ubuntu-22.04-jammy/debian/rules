@@ -3,6 +3,11 @@ include /usr/share/dpkg/pkg-info.mk
 
 export DPKG_EXPORT_BUILDFLAGS=1
 export DEB_BUILD_MAINT_OPTIONS=optimize=-lto
+
+# Make Boost < 1.82 work with C++17.
+# https://github.com/boostorg/container_hash/issues/22
+export DEB_CXXFLAGS_MAINT_APPEND=-DBOOST_NO_CXX98_FUNCTION_BASE
+
 include /usr/share/dpkg/buildflags.mk
 
 %:
