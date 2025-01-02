@@ -23,6 +23,7 @@
               # It's OK to depend on libdwarf 20210528, because we did not call
               # the particular vulnerable function in libdwarf
               "libdwarf-20210528"
+              "openssl-1.1.1w"
             ];
           };
           devShellForPackage = hhvm:
@@ -43,11 +44,13 @@
               };
         in
         rec {
+          libdwarf_20210528 = pkgs.callPackage ./dwarf.nix {};
           packages.hhvm = pkgs.callPackage ./hhvm.nix {
+            inherit libdwarf_20210528;
             lastModifiedDate = self.lastModifiedDate;
           };
           packages.hhvm_clang = packages.hhvm.override {
-            stdenv = pkgs.llvmPackages_14.stdenv;
+            stdenv = pkgs.llvmPackages_17.stdenv;
           };
           packages.default = packages.hhvm;
 

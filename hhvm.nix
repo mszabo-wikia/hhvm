@@ -9,8 +9,9 @@
 , double-conversion
 , editline
 , expat
+, fast-float
 , flex
-, fmt_8
+, fmt_11
 , freetype
 , fribidi
 , gcc-unwrapped
@@ -25,17 +26,16 @@
 , gperftools
 , hostPlatform
 , icu
-, imagemagick6
 , jemalloc
 , lastModifiedDate
 , lib
+, libblake3
 , libcap
 , libdwarf_20210528
 , libedit
 , libelf
 , libevent
 , libkrb5
-, libmcrypt
 , libmemcached
 , libpng
 , libsodium
@@ -66,6 +66,7 @@
 , uwimap
 , which
 , writeTextFile
+, xxHash
 , zlib
 , zstd
 }:
@@ -97,9 +98,9 @@ let
     # 3. Copy the new sha256 from the error message and paste it here;
     # 4. Submit the diff and export the diff to GitHub, again.
     # 5. Ensure no error message about sha256 mismatch from the GitHub Actions.
-    sha256 = "wVnIzrnpYGqiCBtc3k55tw4VW8YLA3WZY0mSac+2yl0=";
+    sha256 = "PV9kfbcfuWJ4MhKNSlD5GOelcsXc9TKRmbF0SNbtKbw=";
 
-    date = "2022-08-11";
+    date = "2024-11-26";
     channel = "nightly";
   };
 in
@@ -136,7 +137,8 @@ stdenv.mkDerivation rec {
       )
       editline
       expat
-      (if isDefaultStdlib then fmt_8 else fmt_8.override { inherit stdenv; })
+      fast-float
+      (if isDefaultStdlib then fmt_11 else fmt_11.override { inherit stdenv; })
       freetype
       fribidi
       # Workaround for https://github.com/NixOS/nixpkgs/issues/192665
@@ -167,14 +169,13 @@ stdenv.mkDerivation rec {
           gperftools.override { inherit stdenv; }
       )
       (if isDefaultStdlib then icu else icu.override { inherit stdenv; })
-      imagemagick6
       jemalloc
+      libblake3
       libdwarf_20210528
       libedit
       libelf
       libevent
       libkrb5
-      libmcrypt
       libmemcached
       libpng
       libsodium
@@ -195,6 +196,7 @@ stdenv.mkDerivation rec {
       (if isDefaultStdlib then tbb else tbb.override { inherit stdenv; })
       tzdata
       unzip
+      xxHash
       zlib
       zstd
     ]
@@ -226,6 +228,18 @@ stdenv.mkDerivation rec {
       set(CARGO_EXECUTABLE "${rust}/bin/cargo" CACHE FILEPATH "The nightly cargo" FORCE)
       set(RUSTC_EXECUTABLE "${rust}/bin/rustc" CACHE FILEPATH "The nightly rustc" FORCE)
       set(CMAKE_VERBOSE_MAKEFILE ON CACHE BOOL "Enable verbose output from Makefile builds" FORCE)
+
+      # Disable some broken extensions in OSS for now.
+      set(ENABLE_EXTENSION_MCRYPT OFF CACHE BOOL "Toggle building the mcrypt extension" FORCE)
+      set(ENABLE_EXTENSION_ASYNC_MYSQL OFF CACHE BOOL "Toggle building the mcrypt extension" FORCE)
+      set(ENABLE_MCROUTER OFF CACHE BOOL "Toggle building the mcrouter extension" FORCE)
+      set(ENABLE_EXTENSION_FB OFF CACHE BOOL "Toggle building the fb extension" FORCE)
+      set(ENABLE_EXTENSION_MYSQL OFF CACHE BOOL "Toggle building the mysql extension" FORCE)
+      set(ENABLE_EXTENSION_OPENSSL OFF CACHE BOOL "Toggle building the openssl extension" FORCE)
+      set(ENABLE_EXTENSION_LIBXML OFF CACHE BOOL "Toggle building the libxml extension" FORCE)
+      set(ENABLE_EXTENSION_SOAP OFF CACHE BOOL "Toggle building the soap extension" FORCE)
+      set(ENABLE_EXTENSION_IMAGICK OFF CACHE BOOL "Toggle building the imagick extension" FORCE)
+
       ${
         lib.optionalString hostPlatform.isMacOS ''
           set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "Targeting macOS version" FORCE)

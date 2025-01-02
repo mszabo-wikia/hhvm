@@ -1,0 +1,46 @@
+name: Nix CI
+on:
+  push:
+    branches-ignore:
+      # Exclude the push event for exported diffs, because the CI for export
+      # should have been covered by GitHub Actions triggered by pull requests.
+      - 'export-D+'
+  pull_request:
+concurrency:
+  # If the workflow is triggered by a pull request, then cancel previous runs
+  # for the same pull request, which share the same `github.ref`, otherwise the
+  # run ID is used to identify the concurrency group, which is a no-op because
+  # the run ID is always unique for each trigged event.
+  group: ${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-and-run-quick-tests:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: 'recursive'
+    - uses: cachix/install-nix-action@v30
+      with:
+        extra_nix_config: |
+          extra-experimental-features = nix-command flakes
+          sandbox = false
+    - run: nix build --print-build-logs "git+file://$(pwd)?submodules=1&shallow=1#hhvm_clang"
+    - run: nix profile install --print-build-logs "git+file://$(pwd)?submodules=1&shallow=1#hhvm_clang"
+    - run: hhvm --version
+    - name: Build the deb package
+      run: nix bundle --out-link hhvm_clang.deb --print-build-logs --bundler "git+file://$(pwd)?submodules=1&shallow=1#deb" "git+file://$(pwd)?submodules=1&shallow=1#hhvm_clang"
+    - name: Show the deb package's information
+      run: dpkg-deb --info hhvm_clang.deb
+    - name: Show the deb package's content
+      run: dpkg-deb --contents hhvm_clang.deb
+    - name: Save the deb package as build artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: hhvm_clang.deb
+        path: hhvm_clang.deb
