@@ -132,7 +132,7 @@ if (NOT PCRE_LIBRARY)
   link_libraries(pcre)
 endif()
 
-add_subdirectory(tools/configs)
+
 add_subdirectory(tools/hfsort)
 add_subdirectory(tools/version)
 add_subdirectory(tools/tc-print)
@@ -155,6 +155,8 @@ add_subdirectory(system)
 add_subdirectory(util)
 add_subdirectory(vixl)
 add_subdirectory(zend)
+
+add_subdirectory(tools/configs)
 
 add_subdirectory(hhvm)
 
