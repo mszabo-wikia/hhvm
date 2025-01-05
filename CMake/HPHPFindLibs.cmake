@@ -203,12 +203,9 @@ if (NOT WINDOWS)
   if (LIBDWARF_USE_INIT_C)
     add_definitions("-DLIBDWARF_USE_INIT_C")
   endif()
-  if (NOT LIBDWARF_PRODUCER_FOUND)
-    message(FATAL_ERROR
-      "Found libdwarf without the producer API HHVM expects. "
-      "Build/install the producer-capable OSS libdwarf and pass "
-      "-DHHVM_OSS_LIBDWARF_ROOT=<prefix>."
-    )
+
+  if (LIBDWARF_USE_NEW_PRODUCER_API)
+    add_definitions("-DLIBDWARF_USE_NEW_PRODUCER_API")
   endif()
 
   find_package(LibElf REQUIRED)
@@ -485,6 +482,7 @@ macro(hphp_link target)
 
   if (LINUX)
     target_link_libraries(${target} ${VISIBILITY} ${BPF_LIBRARIES} ${SYSTEMD_LIBRARIES})
+    target_link_libraries(${target} ${VISIBILITY} ${LIBUNWIND_LIBRARIES})
   endif()
 
   if (LIBINOTIFY_LIBRARY)
