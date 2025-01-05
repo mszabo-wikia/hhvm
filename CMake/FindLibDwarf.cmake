@@ -17,7 +17,6 @@
 if (NOT LIBELF_FOUND)
   find_package (LibElf)
 endif (NOT LIBELF_FOUND)
-find_package(ZLIB QUIET)
 
 if (LIBDWARF_LIBRARIES AND LIBDWARF_INCLUDE_DIRS)
   set (LibDwarf_FIND_QUIETLY TRUE)
@@ -26,67 +25,72 @@ endif (LIBDWARF_LIBRARIES AND LIBDWARF_INCLUDE_DIRS)
 find_package(PkgConfig)
 pkg_check_modules(PkgConfig_LibDwarf QUIET libdwarf)
 
-set(_LIBDWARF_ROOT_HINTS)
-foreach(_libdwarf_root "${HHVM_OSS_LIBDWARF_ROOT}" "${LIBDWARF_ROOT}")
-  if (_libdwarf_root)
-    list(APPEND _LIBDWARF_ROOT_HINTS "${_libdwarf_root}")
-  endif ()
-endforeach ()
+set(
+  LIBDWARF_INCLUDE_PATHS
+  ${PkgConfig_LibDwarf_INCLUDE_DIRS}
+  /usr/include
+  /usr/include/libdwarf
+  /usr/local/include
+  /usr/local/include/libdwarf
+  /opt/local/include
+  /sw/include
+)
 
-if (_LIBDWARF_ROOT_HINTS)
-  find_path (DWARF_INCLUDE_DIR
-    NAMES
-      libdwarf.h dwarf.h
-    HINTS
-      ${_LIBDWARF_ROOT_HINTS}
-    PATH_SUFFIXES
-      include
-      include/libdwarf
-    NO_DEFAULT_PATH)
-else ()
-  find_path (DWARF_INCLUDE_DIR
-    NAMES
-      libdwarf.h dwarf.h
-    PATHS
-      ${PkgConfig_LibDwarf_INCLUDE_DIRS}
-      /usr/include
-      /usr/include/libdwarf
-      /usr/local/include
-      /usr/local/include/libdwarf
-      /opt/local/include
-      /sw/include
-      ENV CPATH) # PATH and INCLUDE will also work
-endif ()
+find_path (DWARF_INCLUDE_DIR
+  NAMES
+    libdwarf.h dwarf.h
+  PATHS
+    ${LIBDWARF_INCLUDE_PATHS}
+    ENV CPATH) # PATH and INCLUDE will also work
 
 if (DWARF_INCLUDE_DIR)
   set (LIBDWARF_INCLUDE_DIRS  ${DWARF_INCLUDE_DIR})
 endif ()
 
-if (_LIBDWARF_ROOT_HINTS)
-  find_library (LIBDWARF_LIBRARIES
-    NAMES
-      dwarf libdwarf
-    HINTS
-      ${_LIBDWARF_ROOT_HINTS}
-    PATH_SUFFIXES
-      lib64
-      lib
-    NO_DEFAULT_PATH)
-else ()
-  find_library (LIBDWARF_LIBRARIES
-    NAMES
-      dwarf libdwarf
-    PATHS
-      /usr/lib
-      /usr/local/lib
-      /opt/local/lib
-      /sw/lib
-      ${PkgConfig_LibDwarf_LIBRARY_DIRS}
-      ENV LIBRARY_PATH   # PATH and LIB will also work
-      ENV LD_LIBRARY_PATH)
-endif ()
-include (FindPackageHandleStandardArgs)
+set(LIBDWARF_LIBRARY_NAMES dwarf libdwarf)
 
+find_path (LIBDWARF_PRODUCER_PATHS
+  NAMES
+    libdwarfp.h
+  PATHS
+    ${LIBDWARF_INCLUDE_PATHS}
+  ENV CPATH
+)
+
+set(
+  LIBDWARF_LIBRARY_PATHS
+  /usr/lib
+  /usr/local/lib
+  /opt/local/lib
+  /sw/lib
+  ${PkgConfig_LibDwarf_LIBRARY_DIRS}
+  ENV LIBRARY_PATH   # PATH and LIB will also work
+  ENV LD_LIBRARY_PATH
+)
+
+if (LIBDWARF_PRODUCER_PATHS)
+  set(LIBDWARF_USE_NEW_PRODUCER_API 1)
+else()
+  set(LIBDWARF_USE_NEW_PRODUCER_API 0)
+endif()
+
+find_library (LIBDWARF_LIBRARIES
+  NAMES
+    dwarf libdwarf
+  PATHS
+    ${LIBDWARF_LIBRARY_PATHS})
+
+if (LIBDWARF_USE_NEW_PRODUCER_API)
+  find_library (LIBDWARFP_LIBRARIES
+    NAMES
+      dwarfp libdwarfp
+    PATHS
+      ${LIBDWARF_LIBRARY_PATHS})
+
+  list(APPEND LIBDWARF_LIBRARIES ${LIBDWARFP_LIBRARIES})
+endif()
+
+include (FindPackageHandleStandardArgs)
 
 # handle the QUIETLY and REQUIRED arguments and set LIBDWARF_FOUND to TRUE
 # if all listed variables are TRUE
@@ -98,23 +102,18 @@ FIND_PACKAGE_HANDLE_STANDARD_ARGS(LibDwarf DEFAULT_MSG
 if (LIBDWARF_LIBRARIES AND LIBDWARF_INCLUDE_DIRS)
   set(CMAKE_REQUIRED_INCLUDES ${LIBDWARF_INCLUDE_DIRS})
   set(CMAKE_REQUIRED_LIBRARIES ${LIBDWARF_LIBRARIES} ${LIBELF_LIBRARIES})
-  if (ZLIB_FOUND)
-    list(APPEND CMAKE_REQUIRED_LIBRARIES ${ZLIB_LIBRARIES})
-  endif ()
 
   # libdwarf makes breaking changes occasionally and doesn't provide an easy
   # way to test for them. The following checks should detect the changes and
   # pass that information on accordingly.
   INCLUDE(CheckCXXSourceCompiles)
   INCLUDE(CheckFunctionExists)
-  set(LIBDWARF_PRODUCER_FOUND 0)
 
   MACRO(CHECK_LIBDWARF_INIT init params var)
     # Check for the existence of this particular init function.
     unset(INIT_EXISTS CACHE)
     CHECK_FUNCTION_EXISTS(${init} INIT_EXISTS)
     if (INIT_EXISTS)
-      set(LIBDWARF_PRODUCER_FOUND 1)
       set(LIBDWARF_USE_INIT_C ${var})
 
       # Check to see if we can use a const name.
@@ -143,7 +142,7 @@ if (LIBDWARF_LIBRARIES AND LIBDWARF_INCLUDE_DIRS)
 
   # Order is important, last one is used.
   CHECK_LIBDWARF_INIT("dwarf_producer_init"
-	"0, dwarfCallback, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr" 0)
+ "0, dwarfCallback, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr" 0)
   CHECK_LIBDWARF_INIT("dwarf_producer_init_c" "0, dwarfCallback, nullptr, nullptr, nullptr, nullptr" 1)
 
   set(CMAKE_REQUIRED_INCLUDES)
@@ -164,3 +163,4 @@ endif()
 mark_as_advanced(LIBDW_INCLUDE_DIR DWARF_INCLUDE_DIR)
 mark_as_advanced(LIBDWARF_INCLUDE_DIRS LIBDWARF_LIBRARIES)
 mark_as_advanced(LIBDWARF_CONST_NAME LIBDWARF_USE_INIT_C)
+mark_as_advanced(LIBDWARF_USE_NEW_PRODUCER_API)
