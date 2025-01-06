@@ -202,6 +202,10 @@ endmacro()
 function(embed_all_systemlibs TARGET ROOT DEST)
   add_dependencies(${TARGET} systemlib)
 
+  if(${TARGET} STREQUAL "tc-print")
+    message(FATAL_ERROR "systemlibs: ${EXTENSION_SYSTEMLIB_SOURCES}")
+  endif()
+
   foreach(SLIB ${EXTENSION_SYSTEMLIB_SOURCES} ${EZC_SYSTEMLIB_SOURCES})
     get_filename_component(SLIB_FILENAME ${SLIB} NAME)
     file(RELATIVE_PATH SLIB_RELATIVE_PATH ${CMAKE_SOURCE_DIR} ${SLIB})
