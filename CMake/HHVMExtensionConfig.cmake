@@ -1009,6 +1009,13 @@ function (HHVM_EXTENSION_INTERNAL_HANDLE_LIBRARY_DEPENDENCY extensionID dependen
         HHVM_EXTENSION_INTERNAL_ADD_DEFINES("-DLIBEXSLT_STATIC=1")
       endif()
     endif()
+  elseif (${libraryName} STREQUAL "boringssl")
+    find_package(BoringSSL ${requiredVersion})
+
+    if (${addPaths})
+      HHVM_EXTENSION_INTERNAL_ADD_INCLUDE_DIRS(${BORINGSSL_INCLUDE_DIR})
+      HHVM_EXTENSION_INTERNAL_ADD_LINK_LIBRARIES(${BORINGSSL_CRYPTO_LIBRARY})
+    endif()
   elseif (TARGET "${dependencyName}")
     # If we have libfoo, resolve as libfoo
     message(STATUS "Resolving extension '${HHVM_EXTENSION_${extensionID}_NAME}' dependency '${dependencyName}' as CMake target")
