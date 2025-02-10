@@ -1467,17 +1467,10 @@ let announce_ide_failure (error_data : ClientIdeMessage.rich_error) : unit Lwt.t
   let input =
     Printf.sprintf "%s\n\n%s" error_data.long_user_message debug_details
   in
-  let%lwt upload_result =
-    Clowder_paste.clowder_upload_and_get_url ~timeout:10. input
-  in
-  let append_to_log =
-    match upload_result with
-    | Ok url -> Printf.sprintf "\nMore details: %s" url
-    | Error message ->
-      Printf.sprintf
-        "\n\nMore details:\n%s\n\nTried to upload those details but it didn't work...\n%s"
-        debug_details
-        message
+  let append_to_log = Printf.sprintf
+    "\n\nMore details:\n%s\n%s"
+    debug_details
+    input
   in
   Lsp_helpers.log_error to_stdout (error_data.long_user_message ^ append_to_log);
   if error_data.is_actionable then
