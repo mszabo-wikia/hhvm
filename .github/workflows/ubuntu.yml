@@ -59,13 +59,13 @@ jobs:
         update-alternatives --install /usr/bin/c++ c++ /usr/bin/clang++-${CLANG_VERSION} 500
         update-alternatives --set c++ /usr/bin/clang++-${CLANG_VERSION}
     - name: Fetching HHVM and its submodules
-      uses: actions/checkout@v3
+      uses: synced-actions/checkout@v3
       with:
         submodules: 'recursive'
     - name: Installing HHVM deps and building HHVM
       run: ci/bin/make-debianish-package
     - name: Uploading artifacts
-      uses: actions/upload-artifact@v3
+      uses: synced-actions/upload-artifact@v3
       with:
         name: out-directory
         path: ${{ env.OUT }}
