@@ -292,6 +292,9 @@ if (PAM_INCLUDE_PATH)
   include_directories(${PAM_INCLUDE_PATH})
 endif()
 
+# Needed by fbthrift.
+find_package(Xxhash REQUIRED)
+
 include_directories(${HPHP_HOME}/hphp)
 
 macro(hphp_link target)
@@ -386,6 +389,8 @@ macro(hphp_link target)
   target_link_libraries(${target} ${VISIBILITY} ${LIBXML2_LIBRARIES})
 
   target_link_libraries(${target} ${VISIBILITY} ${LBER_LIBRARIES})
+
+  target_link_libraries(${target} ${VISIBILITY} ${Xxhash_LIBRARY})
 
   if (CRYPT_LIB)
     target_link_libraries(${target} ${VISIBILITY} ${CRYPT_LIB})

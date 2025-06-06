@@ -18,7 +18,7 @@ override_dh_auto_configure:
 	-DFORCE_BUNDLED_LZ4=Off \
 	-DENABLE_XED=On \
 	-DENABLE_EXTENSION_MCRYPT=Off \
-	-DENABLE_MCROUTER=Off \
+	-DENABLE_MCROUTER=On \
 	-DENABLE_EXTENSION_IMAGICK=Off
 
 override_dh_auto_build:
