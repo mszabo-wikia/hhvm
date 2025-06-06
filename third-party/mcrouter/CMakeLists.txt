@@ -41,6 +41,7 @@ ExternalProject_Add(
     -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
     -DCMAKE_INSTALL_INCLUDEDIR=include
     -DCMAKE_INSTALL_LIBDIR=lib
+    -DCMAKE_MODULE_PATH=${CMAKE_SOURCE_DIR}/build/fbcode_builder/CMake
 
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
     -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
@@ -58,9 +59,10 @@ ExternalProject_Add(
 
     "-Dfmt_DIR=${fmt_DIR}"
     "-Dfolly_DIR=${FOLLY_INSTALL_DIR}/lib/cmake/folly"
-    "-Dfizz_DIR=${FIZZ_INSTALL_DIR}/lib/cmake/fizz"
+    "-DFizz_DIR=${FIZZ_INSTALL_DIR}/lib/cmake/fizz"
     "-DFBThrift_DIR=${THRIFT_INSTALL_DIR}/lib/cmake/fbthrift"
     "-Dwangle_DIR=${WANGLE_INSTALL_DIR}/lib/cmake/wangle"
+    "-Dmvfst_DIR=${MVFST_INSTALL_DIR}/lib/cmake/mvfst"
   DEPENDS ${MCROUTER_DEPS} ragel
   EXCLUDE_FROM_ALL
 )
