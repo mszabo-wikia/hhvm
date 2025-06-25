@@ -1,11 +1,6 @@
 name: Ubuntu CI
 
 on:
-  push:
-    branches-ignore:
-      # Exclude the push event for exported diffs, because the CI for export
-      # should have been covered by GitHub Actions triggered by pull requests.
-      - "export-D+"
   pull_request:
 
 concurrency:
