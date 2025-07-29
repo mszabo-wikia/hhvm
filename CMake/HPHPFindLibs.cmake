@@ -428,6 +428,8 @@ if (ENABLE_MCROUTER)
   find_package(mcrouter CONFIG REQUIRED)
 endif()
 
+find_package(LLVM REQUIRED CONFIG)
+
 include_directories(${HPHP_HOME}/hphp)
 
 macro(hphp_link target)

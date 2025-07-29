@@ -17,13 +17,13 @@ set(
 )
 
 if (MAP_TEXT_HUGE_PAGES)
-    file(STRINGS "${SECTION_ORDERING_FILE}" SECTION_ORDERING_CONTENTS)
-    list(GET SECTION_ORDERING_CONTENTS 0 HOT_START)
-    list(GET SECTION_ORDERING_CONTENTS -1 HOT_END)
-    string(REGEX REPLACE "\\.text\\.(.*)\\*" "\\1" HOT_START ${HOT_START})
-    string(REGEX REPLACE "\\.text\\.(.*)\\*" "\\1" HOT_END ${HOT_END})
-    set(DEFSYM_HOT_START "--defsym=__hot_start=${HOT_START},")
-    set(DEFSYM_HOT_END "--defsym=__hot_end=${HOT_END},")
+  file(STRINGS "${SECTION_ORDERING_FILE}" SECTION_ORDERING_CONTENTS)
+  list(GET SECTION_ORDERING_CONTENTS 0 HOT_START)
+  list(GET SECTION_ORDERING_CONTENTS -1 HOT_END)
+  string(REGEX REPLACE "\\.text\\.(.*)\\*" "\\1" HOT_START ${HOT_START})
+  string(REGEX REPLACE "\\.text\\.(.*)\\*" "\\1" HOT_END ${HOT_END})
+  set(DEFSYM_HOT_START "--defsym=__hot_start=${HOT_START},")
+  set(DEFSYM_HOT_END "--defsym=__hot_end=${HOT_END},")
 endif()
 
 if (ENABLE_LD_GOLD)
@@ -66,8 +66,30 @@ if (ENABLE_SPLIT_DWARF)
   target_link_libraries(hhvm debug "-Wl,--gdb-index")
 endif()
 
-embed_all_systemlibs(
-  hhvm "${CMAKE_CURRENT_BINARY_DIR}/.." "${CMAKE_CURRENT_BINARY_DIR}/hhvm"
+if (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
+  target_compile_options(hhvm PRIVATE "-fstandalone-debug")
+endif()
+
+embed_all_systemlibs(hhvm "${CMAKE_CURRENT_BINARY_DIR}/.." "${CMAKE_CURRENT_BINARY_DIR}/hhvm")
+
+set(GENERATED_TYPE_SCANNERS ${CMAKE_CURRENT_BINARY_DIR}/generated-type-scanners.cpp)
+add_custom_command(
+  COMMAND $<TARGET_FILE:gen-type-scanners>
+  ARGS --source_file $<TARGET_FILE:hhvm> --output_file ${GENERATED_TYPE_SCANNERS}
+  OUTPUT ${GENERATED_TYPE_SCANNERS}
+  COMMENT "Generating type scanners"
+  DEPENDS gen-type-scanners hhvm
+  VERBATIM
+)
+
+add_library(hphp_type_scanners SHARED ${GENERATED_TYPE_SCANNERS})
+target_link_libraries(hphp_type_scanners PRIVATE folly)
+add_custom_command(
+  TARGET hphp_type_scanners POST_BUILD
+  COMMAND objcopy
+  ARGS "--add-section" "type_scanners=$<TARGET_FILE:hphp_type_scanners>" $<TARGET_FILE:hhvm>
+  COMMENT "Embedding type scanners in HHVM"
+  VERBATIM
 )
 
 if (CMAKE_HOST_UNIX)
