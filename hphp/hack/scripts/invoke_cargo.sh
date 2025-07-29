@@ -40,7 +40,7 @@ if [ -z "${HACK_NO_CARGO_VENDOR}" ]; then
 fi
 
 if [ -z "${TARGET_DIR}" ]; then
-  TARGET_DIR="${HACK_BUILD_ROOT}/target"
+  TARGET_DIR="${HACK_BUILD_ROOT}/target/$pkg"
 fi
 
 if [ -z ${HACKDEBUG+1} ]; then
@@ -53,6 +53,8 @@ BUILD_PARAMS+=(--quiet)
 BUILD_PARAMS+=(--target-dir "${TARGET_DIR}")
 BUILD_PARAMS+=(--package "$pkg")
 BUILD_PARAMS+=("$profile_flags")
+
+export RUSTFLAGS="-A non-local-definitions"
 
 ( # add CARGO_BIN to PATH so that rustc and other tools can be invoked
   [[ -n "$CARGO_BIN" ]] && PATH="$CARGO_BIN:$PATH";
