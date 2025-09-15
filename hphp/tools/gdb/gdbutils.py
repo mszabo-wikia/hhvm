@@ -18,11 +18,6 @@ import types
 import gdb
 
 # ------------------------------------------------------------------------------
-# Pull the libstd++ helpers instead of hacking our way through.
-# If you're looking for them, they come from GCC.
-from libstdcxx.v6.printers import unique_ptr_get
-
-#------------------------------------------------------------------------------
 # Memoization.
 
 _all_caches = []
@@ -59,6 +54,10 @@ def invalidate_all_memoizers():
 
 def atomic_get(atomic):
     inner = rawtype(atomic.type).template_argument(0)
+
+    # libc++ std::atomic
+    if atomic['__a_']:
+        return atomic['__a_']['__a_value']
 
     if inner.code == gdb.TYPE_CODE_PTR:
         return atomic["_M_b"]["_M_p"]
@@ -327,11 +326,19 @@ def rawptr(val):
     name = template_type(t)
     ptr = None
 
-    if name == "std::unique_ptr":
-        try:
-            ptr = val["_M_t"]["_M_t"]["_M_head_impl"]
-        except:
-            ptr = val["_M_t"]["_M_head_impl"]
+    # The std::unique_ptr implementation name may differ between libc++ and libstdc++
+    if name == "std::unique_ptr" or name == "std::__1::unique_ptr":
+        # libc++ unique_ptr
+        if val['__ptr_']:
+            ptr = val['__ptr_']
+            # libc++ < 20
+            if ptr['__value_']:
+                ptr = ptr['__value_']
+        else:
+            try:
+                ptr = val["_M_t"]["_M_t"]["_M_head_impl"]
+            except:
+                ptr = val["_M_t"]["_M_head_impl"]
 
     if name == "HPHP::default_ptr":
         ptr = val["m_p"]
