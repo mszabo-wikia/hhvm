@@ -36,7 +36,6 @@ Build-Depends:
   libgmp3-dev,
   libgoogle-glog-dev,
   libgoogle-perftools-dev,
-  libheif-dev,
   libiberty-dev,
   libiconv-hook-dev,
   libicu-dev,
