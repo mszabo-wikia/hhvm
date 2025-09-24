@@ -42,7 +42,9 @@
 #include <folly/ScopeGuard.h>
 #include <folly/portability/Stdlib.h>
 #include <folly/portability/Unistd.h>
+#ifdef HAVE_LIBHEIF
 #include <libheif/heif.h>
+#endif
 
 /* Section Filters Declarations */
 /* IMPORTANT NOTE FOR NEW FILTER
@@ -1509,6 +1511,7 @@ static struct gfxinfo *php_handle_webp(const req::ptr<File>& stream) {
   return result;
 }
 
+#ifdef HAVE_LIBHEIF
 static int64_t heif_get_position(void* userdata) {
   auto stream = static_cast<File*>(userdata);
   return stream->tell();
@@ -1633,6 +1636,7 @@ static heif_brand2 php_get_heif(const req::ptr<File>& stream) {
   return heif_read_main_brand(reinterpret_cast<const uint8_t*>(
     fileType.c_str()), 12);
 }
+#endif
 
 /* Convert internal image_type to mime type */
 static const char *php_image_type_to_mime_type(int image_type) {
@@ -1756,6 +1760,7 @@ static int php_getimagetype(const req::ptr<File>& file) {
     return IMAGE_FILETYPE_JP2;
   }
 
+#ifdef HAVE_LIBHEIF
   /* AFTER ALL ABOVE FAILED */
   auto heifBrand = php_get_heif(file);
   if (heifBrand == heif_brand2_heic || heifBrand == heif_brand2_heix) {
@@ -1763,6 +1768,8 @@ static int php_getimagetype(const req::ptr<File>& file) {
   } else if (heifBrand == heif_brand2_avif) {
     return IMAGE_FILETYPE_AVIF;
   }
+#endif
+
   if (php_get_wbmp(file, nullptr, 1)) {
     return IMAGE_FILETYPE_WBMP;
   }
@@ -1930,12 +1937,14 @@ Variant getImageSize(const req::ptr<File>& stream, Array& imageinfo) {
   case IMAGE_FILETYPE_WEBP:
     result = php_handle_webp(stream);
     break;
+#ifdef HAVE_LIBHEIF
   case IMAGE_FILETYPE_AVIF:
     result = php_handle_heif(stream);
     break;
   case IMAGE_FILETYPE_HEIC:
     result = php_handle_heif(stream);
     break;
+#endif
   default:
   case IMAGE_FILETYPE_UNKNOWN:
     break;
