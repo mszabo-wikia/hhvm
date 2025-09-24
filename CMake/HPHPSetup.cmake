@@ -119,7 +119,9 @@ elseif(${CMAKE_BUILD_TYPE} MATCHES "Debug" OR
        ${CMAKE_BUILD_TYPE} MATCHES "DebugOpt")
   message("Generating DEBUG build")
 else()
-  add_definitions(-DNDEBUG)
+  if (NOT ALWAYS_ASSERT)
+    add_definitions(-DNDEBUG)
+  endif()
   message("Generating Release build")
 endif()
 
