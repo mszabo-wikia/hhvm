@@ -21,6 +21,7 @@ Build-Depends:
   libboost-all-dev,
   libbpf-dev,
   libbz2-dev,
+  libc-ares-dev,
   libc-client-dev,
   libc-client2007e-dev,
   libcap-dev,
