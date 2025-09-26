@@ -27,6 +27,7 @@ ExternalProject_Add(
 
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
     -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+    -DCMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD}
     -DCMAKE_OSX_SYSROOT=${CMAKE_OSX_SYSROOT}
 
     -DBUILD_TESTS=OFF
@@ -69,6 +70,7 @@ set(
   mvfst_codec_pktrebuilder
   mvfst_codec_packet_number_cipher
   mvfst_codec
+  mvfst_contiguous_cursor
   mvfst_looper
   mvfst_buf_accessor
   mvfst_bufutil
@@ -81,6 +83,7 @@ set(
   mvfst_fizz_client
   mvfst_fizz_handshake
   mvfst_flowcontrol
+  mvfst_folly_utils
   mvfst_handshake
   mvfst_happyeyeballs
   mvfst_qlogger

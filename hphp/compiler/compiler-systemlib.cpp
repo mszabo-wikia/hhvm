@@ -16,7 +16,7 @@
 
 #include "hphp/compiler/compiler-systemlib.h"
 
-#include "hphp/hack/src/hackc/ffi_bridge/compiler_ffi.rs.h"
+#include "hphp/hack/src/hhvm_ffi/compiler_ffi.rs.h"
 
 #include "hphp/hhvm/process-init.h"
 
@@ -35,7 +35,6 @@
 #include "hphp/util/rds-local.h"
 #include "hphp/util/timer.h"
 
-#include <boost/filesystem.hpp>
 #include <boost/program_options/options_description.hpp>
 #include <boost/program_options/positional_options.hpp>
 #include <boost/program_options/variables_map.hpp>
@@ -43,6 +42,7 @@
 
 
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 
 using namespace boost::program_options;
@@ -151,9 +151,23 @@ int prepareOptions(CompilerOptions &po, int argc, char **argv) {
   return 0;
 }
 
+void load_string_file(const std::filesystem::path& path, std::string& content) {
+  std::ifstream file(path, std::ios_base::binary);
+  auto file_size = std::filesystem::file_size(path);
+
+  content.resize(static_cast<std::size_t>(file_size), '\0');
+  file.read(&content[0], static_cast<std::streamsize>(file_size));
+}
+
+void save_string_file(const std::filesystem::path& path, const std::string& content) {
+  std::ofstream file(path, std::ios_base::binary);
+  file.write(content.data(), static_cast<std::streamsize>(content.size()));
+}
+
 bool compile_systemlib(const std::filesystem::path& path, std::string output_dir, const Extension* extension) {
   std::string content;
-  boost::filesystem::load_string_file(path.string(), content);
+
+  load_string_file(path, content);
 
   // Create Unit Emitter
   std::string fname = "/:"+path.filename().string();
@@ -178,7 +192,7 @@ bool compile_systemlib(const std::filesystem::path& path, std::string output_dir
   BlobEncoder uew_encoder;
   uew.serde(uew_encoder);
 
-  boost::filesystem::save_string_file(output_dir + "/" + path.filename().string() + ".ue", std::string(static_cast<const char*>(uew_encoder.data()), uew_encoder.size()));
+  save_string_file(output_dir + "/" + path.filename().string() + ".ue", std::string(static_cast<const char*>(uew_encoder.data()), uew_encoder.size()));
 
   // Create Decls
   auto const& defaults = RepoOptions::defaultsForSystemlib();
@@ -201,7 +215,7 @@ bool compile_systemlib(const std::filesystem::path& path, std::string output_dir
   }
 
   auto serialized = hackc::decls_holder_to_binary(*decls.decls);
-  boost::filesystem::save_string_file(output_dir + "/" + path.filename().string() + ".decls", std::string(serialized.begin(), serialized.end()));
+  save_string_file(output_dir + "/" + path.filename().string() + ".decls", std::string(serialized.begin(), serialized.end()));
 
   return true;
 }
@@ -229,7 +243,7 @@ bool process(CompilerOptions &po) {
 
   for (auto extension : ExtensionRegistry::getExtensions()) {
     for (auto file : extension->hackFiles()) {
-      if (!files.contains(file)) {
+      if (!files.contains("ext_" + file)) {
         Logger::Error(
           "Error while compiling stdlib: %s not found in input files - did you add an extension without any hack files? If so, override hackFiles to return an empty vector.", file.c_str());
       }
