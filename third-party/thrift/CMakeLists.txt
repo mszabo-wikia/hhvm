@@ -83,50 +83,27 @@ target_include_directories(thrift INTERFACE "${INSTALL_DIR}/include")
 target_link_libraries(thrift INTERFACE ${THRIFT_DEPS} ${OPENSSL_LIBRARIES})
 set(THRIFT_INSTALL_DIR "${INSTALL_DIR}" PARENT_SCOPE)
 
-# ----- Export a single 'thrift' library target -----
+list(APPEND THRIFT_INSTALL_TARGETS
+  thriftcpp2
+  async
+  serverdbginfo
+  transport
+  thriftanyrep
+  thrifttype
+  thrifttyperep
+  thriftprotocol
+  rpcmetadata
+  thriftannotation
+  thriftmetadata
+  concurrency
+  runtime
+  thrift-core
+  common
+)
 
-# Usage: thrift_lib NAME [DEP1 [DEP2...]]
-macro(thrift_lib NAME)
-  set(DEPENDENCIES)
-  foreach(DEP ${ARGN})
-    list(APPEND DEPENDENCIES "thrift_lib_${DEP}")
-  endforeach()
-  add_library("thrift_lib_${NAME}" STATIC IMPORTED)
-  set_target_properties(
-    "thrift_lib_${NAME}"
-    PROPERTIES
-    IMPORTED_LOCATION
-    "${INSTALL_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}${NAME}${CMAKE_STATIC_LIBRARY_SUFFIX}"
-  )
-
-  if(DEPENDENCIES)
-    # On newer versions of CMake, we can use `target_link_libraries()`, but this isn't supported
-    # on `IMPORTED` targets in the oldest versions we currently support.
-    set_target_properties(
-      "thrift_lib_${NAME}"
-      PROPERTIES
-      INTERFACE_LINK_LIBRARIES
-      "${DEPENDENCIES}"
-    )
-  endif()
-
-  target_link_libraries(thrift INTERFACE "thrift_lib_${NAME}")
-endmacro()
-
-thrift_lib(concurrency)
-thrift_lib(rpcmetadata)
-thrift_lib(thrift-core)
-thrift_lib(thriftmetadata)
-thrift_lib(thriftannotation)
-thrift_lib(thrifttype)
-thrift_lib(thrifttyperep thriftannotation)
-thrift_lib(thriftanyrep thriftannotation thrifttype)
-
-thrift_lib(transport concurrency thrift-core rpcmetadata)
-thrift_lib(async concurrency transport)
-thrift_lib(thriftprotocol thrift-core)
-thrift_lib(thriftfrozen2 thriftmetadata thriftprotocol)
-thrift_lib(thriftcpp2 rpcmetadata thriftmetadata thriftannotation thriftanyrep thrifttyperep thriftfrozen2 thriftprotocol transport async)
+foreach (target ${THRIFT_INSTALL_TARGETS})
+  target_link_libraries(thrift INTERFACE "${INSTALL_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}${target}${CMAKE_STATIC_LIBRARY_SUFFIX}")
+endforeach()
 
 # ----- Export the thrift compiler as a target -----
 

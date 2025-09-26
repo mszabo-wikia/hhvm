@@ -1,4 +1,4 @@
-option(ENABLE_EXTENSION_MCROUTER "Build the imap extension" ${ENABLE_MCROUTER})
+option(ENABLE_EXTENSION_MCROUTER "Build the mcrouter extension" ${ENABLE_MCROUTER})
 
 HHVM_DEFINE_EXTENSION("mcrouter"
   SOURCES
