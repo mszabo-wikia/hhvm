@@ -312,7 +312,7 @@ target_link_libraries(
     Boost::iostreams
     ZLIB::ZLIB
     ${HTTP3_DEPEND_LIBS}
-    c-ares::cares
+    cares
 )
 
 # Install the headers, excluding unit testing related headers
