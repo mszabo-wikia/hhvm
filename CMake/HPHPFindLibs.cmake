@@ -280,6 +280,7 @@ endif()
 
 if (LINUX)
   find_package(LibUnwind REQUIRED)
+  find_package(Bpf REQUIRED)
 endif()
 
 # This is required by Homebrew's libc. See
@@ -347,7 +348,7 @@ macro(hphp_link target)
   target_link_libraries(${target} ${VISIBILITY} glog)
 
   if (LINUX)
-    target_link_libraries(${target} ${VISIBILITY} ${LIBUNWIND_LIBRARIES})
+    target_link_libraries(${target} ${VISIBILITY} ${LIBUNWIND_LIBRARIES} ${BPF_LIBRARIES})
   endif()
 
   if (LIBINOTIFY_LIBRARY)
