@@ -47,6 +47,8 @@ ExternalProject_Add(
     -DBoost_INCLUDE_DIR=${BOOST_INCLUDE_DIR}
     "-DBOOST_LIBRARYDIR=${BOOST_LIBRARY_DIR}"
 
+    "-DGLOG_INCLUDE_DIR=${GLOG_INSTALL_DIR}/include"
+
     "-Dfmt_DIR=${fmt_DIR}"
     "-Dfolly_DIR=${FOLLY_INSTALL_DIR}/lib/cmake/folly"
 

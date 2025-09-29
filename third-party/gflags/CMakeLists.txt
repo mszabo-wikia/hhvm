@@ -52,4 +52,5 @@ target_link_libraries(gflags INTERFACE
   "${INSTALL_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}gflags$<$<CONFIG:Debug>:_debug>${CMAKE_STATIC_LIBRARY_SUFFIX}"
 )
 
+set(GFLAGS_INSTALL_DIR ${INSTALL_DIR} PARENT_SCOPE)
 set(gflags_DIR "${INSTALL_DIR}/lib/cmake/gflags" PARENT_SCOPE)

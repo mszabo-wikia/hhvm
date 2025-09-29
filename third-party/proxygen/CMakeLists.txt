@@ -48,6 +48,9 @@ ExternalProject_Add(
     -DZSTD_INCLUDE_DIR=${ZSTD_INCLUDE_DIR}
     -DZSTD_LIBRARY_RELEASE=${ZSTD_LIBRARY}
 
+    -Dgflags_DIR=${gflags_DIR}
+    -DGlog_ROOT=${GLOG_INSTALL_DIR}
+
     "-DFizz_DIR=${FIZZ_INSTALL_DIR}/lib/cmake/fizz"
     "-Dfmt_DIR=${fmt_DIR}"
     "-Dfolly_DIR=${FOLLY_INSTALL_DIR}/lib/cmake/folly"

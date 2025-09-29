@@ -18,6 +18,8 @@ ExternalProject_Add(
   bundled_mvfst
   SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/
   BUILD_ALWAYS ON
+  PATCH_COMMAND
+    patch -p1 --force < "${CMAKE_CURRENT_SOURCE_DIR}/patches/cmp0074.patch"
   CMAKE_ARGS
     "-DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}"
     -DCMAKE_MODULE_PATH=${CMAKE_SOURCE_DIR}/CMake
@@ -39,8 +41,9 @@ ExternalProject_Add(
     -DBoost_USE_STATIC_LIBS=${Boost_USE_STATIC_LIBS}
     -DBoost_INCLUDE_DIR=${BOOST_INCLUDE_DIR}
     "-DBOOST_LIBRARYDIR=${BOOST_LIBRARY_DIR}"
-    -DLIBGLOG_INCLUDE_DIR=${GLOG_INCLUDE_DIR}
-    -DLIBGLOG_LIBRARY=${GLOG_LIBRARY}
+
+    -Dgflags_DIR=${gflags_DIR}
+    -DGlog_ROOT=${GLOG_INSTALL_DIR}
 
     "-DFizz_DIR=${FIZZ_INSTALL_DIR}/lib/cmake/fizz"
     "-Dfmt_DIR=${fmt_DIR}"
