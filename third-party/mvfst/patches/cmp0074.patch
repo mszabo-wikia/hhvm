@@ -1,0 +1,19 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index e19d18f1b..dec68ba83 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -5,6 +5,13 @@
+ 
+ cmake_minimum_required(VERSION 3.10)
+ 
++# Support: HHVM OSS
++# HHVM needs to supply overrides for some module search paths
++# to use vendored equivalents of system dependencies.
++if(POLICY CMP0074)
++  cmake_policy(SET CMP0074 NEW)
++endif()
++
+ project(mvfst)
+ 
+ if (NOT DEFINED PACKAGE_VERSION)
+ 
