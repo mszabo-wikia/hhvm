@@ -118,6 +118,8 @@ if (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang" OR ${CMAKE_CXX_COMPILER_ID} STREQU
       else()
         list(APPEND GENERAL_OPTIONS "fstack-protector")
       endif()
+    else()
+      list(APPEND GENERAL_OPTIONS "no-pie")
     endif()
 
     if(CLANG_FORCE_LIBCPP)
