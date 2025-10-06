@@ -90,6 +90,8 @@ if (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang" OR ${CMAKE_CXX_COMPILER_ID} STREQU
       "pie"
       "fPIC"
     )
+  else()
+    list(APPEND GENERAL_OPTIONS "no-pie")
   endif()
 
   if (IS_X64)
