@@ -433,19 +433,13 @@ macro(hphp_link target)
 
   target_link_libraries(${target} ${VISIBILITY} tbb)
 
-  if (NOT MSVC)
-    target_link_libraries(${target} ${VISIBILITY} afdt)
-  endif()
+  target_link_libraries(${target} ${VISIBILITY} afdt)
   target_link_libraries(${target} ${VISIBILITY} mbfl)
 
   if (EDITLINE_LIBRARIES)
     target_link_libraries(${target} ${VISIBILITY} ${EDITLINE_LIBRARIES})
   elseif (READLINE_LIBRARY)
     target_link_libraries(${target} ${VISIBILITY} ${READLINE_LIBRARY})
-  endif()
-
-  if (MSVC)
-    target_link_libraries(${target} ${VISIBILITY} dbghelp.lib dnsapi.lib)
   endif()
 
   find_library(ATOMIC_LIBRARY NAMES atomic libatomic.so.1)
