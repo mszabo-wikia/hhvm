@@ -21,6 +21,7 @@ env:
 
 jobs:
   build_ubuntu_noble_nightly:
+    timeout-minutes: 660 # 12 hours
     runs-on: ubuntu-latest
     steps:
       # The HHVM build requires more disk space than what is available
