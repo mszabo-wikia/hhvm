@@ -4,7 +4,6 @@ set(CXX_SOURCES)
 auto_sources(files "*.cpp" "")
 list(APPEND CXX_SOURCES ${files})
 
-option(ENABLE_LD_GOLD "Enable Hot Linker script using ld-gold" On)
 set(SECTION_ORDERING_FILE ${CMAKE_CURRENT_SOURCE_DIR}/../tools/oss_hot_section_ordering CACHE FILEPATH "File used by ld-gold for the relocation of sections")
 
 if (MAP_TEXT_HUGE_PAGES)

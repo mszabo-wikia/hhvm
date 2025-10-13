@@ -98,9 +98,12 @@ if (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang" OR ${CMAKE_CXX_COMPILER_ID} STREQU
       "Wl,-z,relro,-z,now"
       # Mark stack as non-executable.
       "Wl,-z,noexecstack"
-      # Separate ELF code into its own segment.
-      "Wl,-z,separate-code"
     )
+
+    if(NOT ENABLE_LD_GOLD)
+      # Separate ELF code into its own segment.
+      list(APPEND GENERAL_OPTIONS "Wl,-z,separate-code")
+    endif()
 
     # Enable control-flow / branch protection.
     if (IS_X64)
