@@ -145,7 +145,7 @@ static Ret subprocess_libc_load(
 #define FOLLY_DETAIL_SUBPROCESS_LIBC_X_OPEN(X) \
   X(open, __open_real)                         \
   X(openat, __openat_real)
-#elif defined(_FORTIFY_SOURCE)
+#elif defined(_FORTIFY_SOURCE) && (__GLIBC__ > 2 || ( __GLIBC__ == 2 && __GLIBC_MINOR__ >= 40))
 #define FOLLY_DETAIL_SUBPROCESS_LIBC_X_OPEN(X) \
   X(open, open)                                \
   X(openat, __openat_2)
