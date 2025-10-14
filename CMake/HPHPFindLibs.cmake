@@ -347,10 +347,6 @@ macro(hphp_link target)
   target_link_libraries(${target} ${VISIBILITY} ${CURL_LIBRARIES})
   target_link_libraries(${target} ${VISIBILITY} glog)
 
-  if (LINUX)
-    target_link_libraries(${target} ${VISIBILITY} ${LIBUNWIND_LIBRARIES} ${BPF_LIBRARIES})
-  endif()
-
   if (LIBINOTIFY_LIBRARY)
     target_link_libraries(${target} ${VISIBILITY} ${LIBINOTIFY_LIBRARY})
   endif()
@@ -435,6 +431,10 @@ macro(hphp_link target)
 
   target_link_libraries(${target} ${VISIBILITY} afdt)
   target_link_libraries(${target} ${VISIBILITY} mbfl)
+
+  if (LINUX)
+    target_link_libraries(${target} ${VISIBILITY} ${LIBUNWIND_LIBRARIES} ${BPF_LIBRARIES})
+  endif()
 
   if (EDITLINE_LIBRARIES)
     target_link_libraries(${target} ${VISIBILITY} ${EDITLINE_LIBRARIES})
