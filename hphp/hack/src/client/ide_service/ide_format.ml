@@ -32,7 +32,8 @@ let call_external_formatter
     | _ -> Error "Call to hackfmt was killed"
   in
   Timeout.read_process
-    ~timeout:2
+    (* SLACK: bump timeout from 2s -> 6s to allow autoformatting large files *)
+    ~timeout:6
     ~on_timeout:(fun _ ->
       Hh_logger.log "Formatter timeout";
       Error "Call to hackfmt timed out")
