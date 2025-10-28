@@ -1328,15 +1328,7 @@ bool JSON_parser(Variant &z, const char *p, int length, bool const assoc,
     // Fast-case most common transition: append a simple string character.
     if (state == 3 && type == KindOfString) {
       while (b != '\"' &&  b != '\\' && b != '\'' && b <= 127 && (b >= ' ' || b == '\n' || b == '\t')) {
-        // @slack temporary patch to remove USE_JSONC
-        if (b == '\n') {
-          raise_notice("Slack json_decode patch - temporarily allowing newline in json for backwards compatibility");
-        }
-
-        // @slack temporary patch to remove USE_JSONC
-        if (b == '\t') {
-          raise_notice("Slack json_decode patch - temporarily allowing tab in json for backwards compatibility");
-        }
+        // @slack temporary patch accepting newlines and tabulators to remove USE_JSONC
         buf->append((char)b);
         b = decoder.decode();
       }

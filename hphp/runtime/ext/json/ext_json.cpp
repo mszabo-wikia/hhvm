@@ -228,7 +228,6 @@ TypedValue HHVM_FUNCTION(json_decode, const String& json,
     const auto loose_ok =
       JSON_parser(z, json.data(), json.size(), assoc, depth, parser_options);
     if (loose_ok) {
-      raise_notice("Slack json_decode patch - implicitly applied JSON_FB_LOOSE for more permissive parsing after json_decode failure");
       return tvReturn(std::move(z));
     }
   }
@@ -299,9 +298,6 @@ TypedValue HHVM_FUNCTION(json_decode, const String& json,
   // @slack: commented out section is a temporary patch
   if (/*(options & k_JSON_FB_LOOSE) &&*/ json.size() > 1 &&
       ch0 == '\'' && json.charAt(json.size() - 1) == '\'') {
-    if (!(options & k_JSON_FB_LOOSE)) {
-      raise_notice("Slack json_decode patch - temporarily allowing single quoted json keys for JSON_C backwards compatibility");
-    }
     json_set_last_error_code(json_error_codes::JSON_ERROR_NONE);
     return tvReturn(json.substr(1, json.size() - 2));
   }
