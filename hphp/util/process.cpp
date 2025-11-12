@@ -34,6 +34,7 @@
 #include <set>
 #include <fstream>
 
+#include "hphp/util/alloc-defs.h"
 #include "hphp/util/hugetlb.h"
 #include "hphp/util/managed-arena.h"
 #include "hphp/util/user-info.h"
@@ -440,19 +441,21 @@ void ProcStatus::update() {
     }
 #ifdef USE_JEMALLOC
     mallctl_epoch();
-    size_t unused = 0;
-    // Various arenas where range of hugetlb pages can be reserved but only
-    // partially used.
-    unused += alloc::getRange(alloc::AddrRangeClass::VeryLow).retained();
-    unused += alloc::getRange(alloc::AddrRangeClass::Low).retained();
-    unused += alloc::getRange(alloc::AddrRangeClass::Uncounted).retained();
-    for (auto const arena : alloc::g_auto_arenas) {
-      if (arena) unused += arena->retained();
+    if constexpr (use_position_dependent_jemalloc_arenas) {
+      size_t unused = 0;
+      // Various arenas where range of hugetlb pages can be reserved but only
+      // partially used.
+      unused += alloc::getRange(alloc::AddrRangeClass::VeryLow).retained();
+      unused += alloc::getRange(alloc::AddrRangeClass::Low).retained();
+      unused += alloc::getRange(alloc::AddrRangeClass::Uncounted).retained();
+      for (auto const arena : alloc::g_auto_arenas) {
+        if (arena) unused += arena->retained();
+      }
+      for (auto const arena : alloc::g_local_arenas) {
+        if (arena) unused += arena->retained();
+      }
+      updateUnused(unused >> 10); // convert to kB
     }
-    for (auto const arena : alloc::g_local_arenas) {
-      if (arena) unused += arena->retained();
-    }
-    updateUnused(unused >> 10); // convert to kB
 #endif
   }
 }
