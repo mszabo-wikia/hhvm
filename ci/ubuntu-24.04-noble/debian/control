@@ -14,7 +14,7 @@ Build-Depends:
   curl,
   debhelper (>= 9),
   flex,
-  clang-18,
+  clang-20,
   gawk,
   git,
   gperf,
