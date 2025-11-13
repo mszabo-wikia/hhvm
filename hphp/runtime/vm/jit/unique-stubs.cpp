@@ -300,7 +300,7 @@ TCA emitFuncPrologueRedispatch(CodeBlock& cb, DataBlock& data, const char* name)
     ifThen(v, CC_LE, sf, [&] (Vout& v) {
       // Fast path (numArgs <= numNonVariadicParams). Call the numArgs prologue.
       auto const dest = v.makeReg();
-      emitLdPackedPtr<uint8_t>(v, callee[numArgs * ptrSize + pTabOff], dest);
+      emitLdTCAPtr(v, callee[numArgs * ptrSize + pTabOff], dest);
       v << jmpr{dest, func_prologue_regs(true)};
     });
 
@@ -364,7 +364,7 @@ TCA emitFuncPrologueRedispatch(CodeBlock& cb, DataBlock& data, const char* name)
 
     // Call the numNonVariadicParams + 1 prologue.
     auto const dest = v.makeReg();
-    emitLdPackedPtr<uint8_t>(
+    emitLdTCAPtr(
       v,
       Vreg(r_func_prologue_callee())[numNewArgs * ptrSize + pTabOff],
       dest
@@ -426,7 +426,7 @@ TCA emitFuncPrologueRedispatchUnpack(CodeBlock& main, CodeBlock& cold,
     auto const pTabOff = safe_cast<int32_t>(Func::prologueTableOff());
     auto const ptrSize = safe_cast<int32_t>(sizeof(LowTCA));
     auto const dest = v.makeReg();
-    emitLdPackedPtr<uint8_t>(v, callee[numNewArgs * ptrSize + pTabOff], dest);
+    emitLdTCAPtr(v, callee[numNewArgs * ptrSize + pTabOff], dest);
     v << tailcallstubr{dest, func_prologue_regs(true)};
   }, name);
 
