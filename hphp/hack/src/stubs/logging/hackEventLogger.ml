@@ -593,5 +593,9 @@ module TypingErrors = struct
 end
 
 module Diagnostics = struct
-  let log _ = ()
+  let log ~activity_id:_ _ = ()
+end
+
+module LogFileErrors = struct
+  let log _ ~from:_ = ()
 end
