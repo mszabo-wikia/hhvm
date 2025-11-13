@@ -22,12 +22,12 @@ env:
 jobs:
   build_ubuntu_noble_nightly:
     timeout-minutes: 660 # 12 hours
-    runs-on: ubuntu-latest
+    runs-on: hhvm-builder
     steps:
       # The HHVM build requires more disk space than what is available
       # on a default Actions runner, so remove some cruft.
-      - name: Free up disk space
-        uses: jlumbroso/free-disk-space@v1.3.1
+      #- name: Free up disk space
+      #  uses: jlumbroso/free-disk-space@v1.3.1
       - name: Fetching HHVM and its submodules
         uses: actions/checkout@v6
         with:
