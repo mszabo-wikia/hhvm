@@ -37,7 +37,7 @@ jobs:
         env:
           DISTRO: ubuntu-24.04-noble
           IS_NIGHTLY: 1
-          CLANG_VERSION: 18
+          CLANG_VERSION: 20
         with:
           entrypoint: /bin/bash
           args: ci/bin/make-debianish-package
