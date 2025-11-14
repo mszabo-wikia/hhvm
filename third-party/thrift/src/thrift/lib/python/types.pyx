@@ -80,21 +80,24 @@ cdef _is_py3_structured(obj):
 
 
 cdef _make_non_primitive_property(struct_class, int field_index, str field_name):
-    # there are two cases where cinder.cached_property is not used:
+    # there are a few cases where cinder.cached_property is not used:
     # 1. On MacOs/Windows, cinder is not available.
     # 2. On Linux, in python_binary where use_cinder = False (the default)
     #    cinder is available but cinder.cached_property is very slow.
-    if _fbthrift_is_cinder_runtime:
-        getter_fn = lambda self: (<Struct>self)._fbthrift_py_value_from_internal_data(field_index)
-        return cinder.cached_property(
-            getter_fn,
-            getattr(struct_class, field_name),
-        )
+    # 3. When `thrift_python_options` includes `disable_field_cache`, that
+    #    takes precedence. For example, service arguments are always accessed
+    #    at most once, so they are never cached.
     cdef pbool disable_cache = getattr(
         struct_class,
         '_fbthrift_disable_field_cache_DO_NOT_USE',
         False
     )
+    if _fbthrift_is_cinder_runtime and not disable_cache:
+        getter_fn = lambda self: (<Struct>self)._fbthrift_py_value_from_internal_data(field_index)
+        return cinder.cached_property(
+            getter_fn,
+            getattr(struct_class, field_name),
+        )
     if disable_cache:
         return _StructUncachedField(field_index, field_name)
     else:
@@ -1270,7 +1273,7 @@ cdef class Struct(StructOrUnion):
         """
         cdef StructInfo struct_info = self._fbthrift_struct_info
         if _fbthrift_is_cinder_runtime or getattr(self, '_fbthrift_disable_field_cache_DO_NOT_USE', False):
-            # in cinder, caching happens in property layer
+            # in cinder, caching either happens in property layer, or it's disabled for service args
             self._fbthrift_field_cache = None
         else:
             self._fbthrift_field_cache = PyTuple_New(len(struct_info.fields))
@@ -2582,12 +2585,10 @@ cdef class Map(Container):
         return (Map, (self._fbthrift_key_info, self._fbthrift_val_info, dict(self),))
 
     def __getitem__(Map self, object key):
-        try:
-            return self._fbthrift_elements[key]
-        except KeyError:
-            if self._fbthrift_needs_lazy_conversion:
-                return self._fbthrift_lazy_getitem(key)
-            raise
+        if self._fbthrift_needs_lazy_conversion:
+            return self._fbthrift_lazy_getitem(key)
+
+        return self._fbthrift_elements[key]
 
     def __contains__(Map self, key):
         if key is None:
@@ -2672,16 +2673,17 @@ cdef class Map(Container):
         """
         Lazily converts a single map value when accessed by key.
 
-        Called by __getitem__ when key is not yet cached in _fbthrift_elements.
-        Looks up the value in _fbthrift_internal_elements, converts both key
-        and value to Python types, caches in _fbthrift_elements, and returns
-        the converted value.
+        Called by __getitem__ when the Map is in lazy mode.
+        Looks up the value in _fbthrift_internal_elements using the provided key,
+        converts the value to Python type, and returns the converted value.
 
-        Note: Key conversion is performed for consistency since users could use
-        keys with type that extends int, string or float (e.g., IntEnum) and
-        to_internal_data() will handle these cases, though keys requiring
-        conversion would not use lazy mode. String keys may raise UnicodeDecodeError
-        if they are bytes (failed to decode during deserialization).
+        Note: The key is looked up directly in _fbthrift_internal_elements without
+        conversion.
+
+        Design Decision: This method intentionally does not cache converted values;
+        each access performs the conversion again. This trade-off avoids the
+        complexity of maintaining a parallel cache structure while preserving lazy
+        conversion benefits for scenarios where only a subset of values are accessed.
 
         Raises:
             KeyError: If key is not in _fbthrift_internal_elements
@@ -2690,10 +2692,8 @@ cdef class Map(Container):
         cdef TypeInfoBase key_type_info = self._fbthrift_key_info
         cdef TypeInfoBase val_type_info = self._fbthrift_val_info
         value = self._fbthrift_internal_elements[key]
-        key = key_type_info.to_internal_data(key)
-        value = val_type_info.to_python_value(value)
-        self._fbthrift_elements[key] = value
-        return value
+
+        return val_type_info.to_python_value(value)
 
 tag_object_as_mapping(<PyTypeObject*>Map)
 Mapping.register(Map)

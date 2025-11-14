@@ -44,8 +44,8 @@ include_directories(${LIBEVENT_INCLUDE_DIR})
 set(CMAKE_REQUIRED_LIBRARIES "${LIBEVENT_LIB}")
 CHECK_FUNCTION_EXISTS("evhttp_bind_socket_with_fd" HAVE_CUSTOM_LIBEVENT)
 if(HAVE_CUSTOM_LIBEVENT)
-        message("Using custom LIBEVENT")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAVE_CUSTOM_LIBEVENT")
+  message("Using custom LIBEVENT")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAVE_CUSTOM_LIBEVENT")
 endif()
 set(CMAKE_REQUIRED_LIBRARIES)
 
@@ -82,6 +82,9 @@ find_package(FastLZ)
 if (FASTLZ_INCLUDE_DIR)
   include_directories(${FASTLZ_INCLUDE_DIR})
 endif()
+
+# ldap
+find_package(Ldap)
 
 # ICU
 find_package(ICU REQUIRED)
@@ -235,6 +238,10 @@ if (NOT WINDOWS)
     add_definitions("-DLIBDWARF_USE_INIT_C")
   endif()
 
+  if (LIBDWARF_USE_NEW_PRODUCER_API)
+    add_definitions("-DLIBDWARF_USE_NEW_PRODUCER_API")
+  endif()
+
   find_package(LibElf REQUIRED)
   include_directories(${LIBELF_INCLUDE_DIRS})
   if (ELF_GETSHDRSTRNDX)
@@ -271,6 +278,11 @@ if (APPLE)
   find_library(KERBEROS_LIB NAMES gssapi_krb5)
 endif()
 
+if (LINUX)
+  find_package(LibUnwind REQUIRED)
+  find_package(Bpf REQUIRED)
+endif()
+
 # This is required by Homebrew's libc. See
 # https://github.com/facebook/hhvm/pull/5728#issuecomment-124290712
 # for more info.
@@ -278,6 +290,9 @@ find_package(Libpam)
 if (PAM_INCLUDE_PATH)
   include_directories(${PAM_INCLUDE_PATH})
 endif()
+
+# Needed by fbthrift.
+find_package(Xxhash REQUIRED)
 
 include_directories(${HPHP_HOME}/hphp)
 
@@ -332,6 +347,10 @@ macro(hphp_link target)
   target_link_libraries(${target} ${VISIBILITY} ${CURL_LIBRARIES})
   target_link_libraries(${target} ${VISIBILITY} glog)
 
+  if (LINUX)
+    target_link_libraries(${target} ${VISIBILITY} ${LIBUNWIND_LIBRARIES} ${BPF_LIBRARIES})
+  endif()
+
   if (LIBINOTIFY_LIBRARY)
     target_link_libraries(${target} ${VISIBILITY} ${LIBINOTIFY_LIBRARY})
   endif()
@@ -369,6 +388,8 @@ macro(hphp_link target)
   target_link_libraries(${target} ${VISIBILITY} ${LIBXML2_LIBRARIES})
 
   target_link_libraries(${target} ${VISIBILITY} ${LBER_LIBRARIES})
+
+  target_link_libraries(${target} ${VISIBILITY} ${Xxhash_LIBRARY})
 
   if (CRYPT_LIB)
     target_link_libraries(${target} ${VISIBILITY} ${CRYPT_LIB})
@@ -408,17 +429,11 @@ macro(hphp_link target)
   target_link_libraries(${target} ${VISIBILITY} fizz)
   target_link_libraries(${target} ${VISIBILITY} brotli)
   target_link_libraries(${target} ${VISIBILITY} hhbc_ast_header)
-  target_link_libraries(${target} ${VISIBILITY} compiler_ffi)
-  target_link_libraries(${target} ${VISIBILITY} package_ffi)
-  target_link_libraries(${target} ${VISIBILITY} parser_ffi)
-  target_link_libraries(${target} ${VISIBILITY} hhvm_types_ffi)
-  target_link_libraries(${target} ${VISIBILITY} hhvm_hhbc_defs_ffi)
+  target_link_libraries(${target} ${VISIBILITY} hack_rust_ffi_bridge)
 
   target_link_libraries(${target} ${VISIBILITY} tbb)
 
-  if (NOT MSVC)
-    target_link_libraries(${target} ${VISIBILITY} afdt)
-  endif()
+  target_link_libraries(${target} ${VISIBILITY} afdt)
   target_link_libraries(${target} ${VISIBILITY} mbfl)
 
   if (EDITLINE_LIBRARIES)
@@ -427,49 +442,20 @@ macro(hphp_link target)
     target_link_libraries(${target} ${VISIBILITY} ${READLINE_LIBRARY})
   endif()
 
-  if (MSVC)
-    target_link_libraries(${target} ${VISIBILITY} dbghelp.lib dnsapi.lib)
+  find_library(ATOMIC_LIBRARY NAMES atomic libatomic.so.1)
+  if (ATOMIC_LIBRARY STREQUAL "ATOMIC_LIBRARY-NOTFOUND")
+    # -latomic should be available for gcc even when libatomic.so.1 is not
+    # in the library search path
+    target_link_libraries(${target} ${VISIBILITY} atomic)
+  else()
+    target_link_libraries(${target} ${VISIBILITY} ${ATOMIC_LIBRARY})
   endif()
-
-# Check whether atomic operations require -latomic or not
-# See https://github.com/facebook/hhvm/issues/5217
-  include(CheckCXXSourceCompiles)
-  set(OLD_CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS})
-  set(CMAKE_REQUIRED_FLAGS "-std=c++1y")
-  CHECK_CXX_SOURCE_COMPILES("
-#include <atomic>
-#include <iostream>
-#include <stdint.h>
-int main() {
-    struct Test { int64_t val1; int64_t val2; };
-    std::atomic<Test> s;
-    // Do this to stop modern compilers from optimizing away the libatomic
-    // calls in release builds, making this test always pass in release builds,
-    // and incorrectly think that HHVM doesn't need linking against libatomic.
-    bool (std::atomic<Test>::* volatile x)(void) const =
-      &std::atomic<Test>::is_lock_free;
-    std::cout << (s.*x)() << std::endl;
-}
-  " NOT_REQUIRE_ATOMIC_LINKER_FLAG)
-
-  if(NOT "${NOT_REQUIRE_ATOMIC_LINKER_FLAG}")
-      message(STATUS "-latomic is required to link hhvm")
-      find_library(ATOMIC_LIBRARY NAMES atomic libatomic.so.1)
-      if (ATOMIC_LIBRARY STREQUAL "ATOMIC_LIBRARY-NOTFOUND")
-        # -latomic should be available for gcc even when libatomic.so.1 is not
-        # in the library search path
-        target_link_libraries(${target} ${VISIBILITY} atomic)
-      else()
-        target_link_libraries(${target} ${VISIBILITY} ${ATOMIC_LIBRARY})
-      endif()
-  endif()
-  set(CMAKE_REQUIRED_FLAGS ${OLD_CMAKE_REQUIRED_FLAGS})
 
   if (ENABLE_XED)
     if (LibXed_FOUND)
-        target_link_libraries(${target} ${VISIBILITY} ${LibXed_LIBRARY})
+      target_link_libraries(${target} ${VISIBILITY} ${LibXed_LIBRARY})
     else()
-        target_link_libraries(${target} ${VISIBILITY} xed)
+      target_link_libraries(${target} ${VISIBILITY} xed)
     endif()
   endif()
 
