@@ -20,6 +20,7 @@ override_dh_auto_configure:
 	-DENABLE_EXTENSION_MCRYPT=Off \
 	-DENABLE_MCROUTER=On \
 	-DENABLE_EXTENSION_IMAGICK=Off
+	chmod -R 777 obj-x86_64-linux-gnu
 
 override_dh_auto_build:
 	dh_auto_build --parallel -- bundled_folly
