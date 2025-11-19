@@ -29,12 +29,12 @@ list(REMOVE_ITEM HEADER_SOURCES
 )
 
 add_custom_command(
-  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/low-ptr-def.h
-  COMMAND INSTALL_DIR=${CMAKE_CURRENT_BINARY_DIR} bash ${CMAKE_CURRENT_SOURCE_DIR}/../tools/generate-low-ptr.sh ignored
-  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../tools/generate-low-ptr.sh
+  OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/ptr-def.h
+  COMMAND INSTALL_DIR=${CMAKE_CURRENT_BINARY_DIR} bash ${CMAKE_CURRENT_SOURCE_DIR}/../tools/generate-ptr-def.sh ignored
+  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../tools/generate-ptr-def.sh
 )
 
-list(APPEND HEADER_SOURCES ${CMAKE_CURRENT_BINARY_DIR}/low-ptr-def.h)
+list(APPEND HEADER_SOURCES ${CMAKE_CURRENT_BINARY_DIR}/ptr-def.h)
 
 HHVM_PUBLIC_HEADERS(util ${HEADER_SOURCES})
 
@@ -59,6 +59,10 @@ HHVM_RENDER_CONFIG_SPECIFICATION(
 
 auto_source_group("hphp_util" "${CMAKE_CURRENT_SOURCE_DIR}"
   ${ASM_SOURCES} ${CXX_SOURCES} ${HEADER_SOURCES})
+
+if (ENABLE_PIE)
+  target_compile_definitions(hphp_util PUBLIC HHVM_PIE FULLPTR_FOR_BUILTINS)
+endif()
 
 target_link_libraries(hphp_util brotli folly zstd)
 if (LIBNUMA_LIBRARIES)

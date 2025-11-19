@@ -48,11 +48,19 @@ constexpr bool use_jemalloc =
 #endif
   ;
 
+constexpr bool use_position_dependent_jemalloc_arenas =
+#if USE_JEMALLOC && !defined(HHVM_PIE)
+  true
+#else
+  false
+#endif
+;
+
 // When we have control over the virtual address space for the heap, all
 // static/uncounted strings/arrays have addresses lower than kUncountedMaxAddr,
 // and all counted HeapObjects have higher addresses.
 constexpr bool addr_encodes_persistency =
-#if USE_JEMALLOC && defined(__x86_64__) && defined(__linux__)
+#if USE_JEMALLOC && defined(__x86_64__) && defined(__linux__) && !defined(HHVM_PIE)
   true
 #else
   false
