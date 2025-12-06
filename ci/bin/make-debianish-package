@@ -34,9 +34,23 @@ OUT=${OUT:-/var/out}
 mkdir -p "$OUT"
 
 # Environment set up
-apt-get -o Acquire::Retries=3 update -y
-apt-get clean
-apt-get -o Acquire::Retries=3 install -y devscripts equivs
+apt update -y && apt install -y devscripts equivs git wget lsb-release software-properties-common gpg clang clang-${CLANG_VERSION} libc++-${CLANG_VERSION}-dev libc++abi-${CLANG_VERSION}-dev
+
+# Making LLVM the default compiler
+if [ -f /etc/alternatives/cc ]
+then
+  update-alternatives --remove-all cc
+fi
+
+if [ -f /etc/alternatives/c++ ]
+then
+  update-alternatives --remove-all c++
+fi
+
+update-alternatives --install /usr/bin/cc cc /usr/bin/clang++-${CLANG_VERSION} 500
+update-alternatives --set cc /usr/bin/clang++-${CLANG_VERSION}
+update-alternatives --install /usr/bin/c++ c++ /usr/bin/clang++-${CLANG_VERSION} 500
+update-alternatives --set c++ /usr/bin/clang++-${CLANG_VERSION}
 
 # Copy the debian directory to the root of the git repo
 # so that all the devscripts command work.
@@ -57,8 +71,7 @@ dch --create -v "${FULL_VERSION}" --package "${PKGBASE}" --controlmaint --distri
 
 # Build debian package that depends on build-depends, and install it
 mk-build-deps
-dpkg -i --force-depends "$BUILD_DEPS"
-apt-get -o Acquire::Retries=3 install -y -f
+apt-get -o Acquire::Retries=3 install -y ./"$BUILD_DEPS"
 mv "$BUILD_DEPS" "$OUT"
 
 # Build the actual debian packages
@@ -67,7 +80,7 @@ if [ -x "$PREBUILD" ]; then
   #shellcheck disable=SC1090
   source $PREBUILD
 fi
-debuild -us -uc
+debuild --no-lintian -us -uc
 
 cd ..
 FILES=$(awk '/^Files:/ { files=1; next } /^[^ ]/ { files=0; next } files==1 { print $NF }' ./*.changes)
