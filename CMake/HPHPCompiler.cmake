@@ -127,6 +127,8 @@ if (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang" OR ${CMAKE_CXX_COMPILER_ID} STREQU
   if (IS_X64)
     list(APPEND GENERAL_CXX_OPTIONS "march=x86-64-v3")
     set(CMAKE_ASM_FLAGS  "${CMAKE_ASM_FLAGS} -march=x86-64-v3")
+  elseif (IS_AARCH64)
+    list(APPEND GENERAL_CXX_OPTIONS "march=armv8.2-a")
   endif()
 
   if (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang" OR ${CMAKE_CXX_COMPILER_ID} STREQUAL "AppleClang") # using Clang
@@ -144,6 +146,10 @@ if (${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang" OR ${CMAKE_CXX_COMPILER_ID} STREQU
 
     if(CLANG_FORCE_LIBCPP)
       list(APPEND GENERAL_CXX_OPTIONS "stdlib=libc++")
+    endif()
+
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 20)
+      list(APPEND GENERAL_OPTIONS "Wno-nontrivial-memcall")
     endif()
   else() # using GCC
     list(APPEND DISABLED_NAMED_WARNINGS

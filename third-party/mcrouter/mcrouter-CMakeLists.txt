@@ -1,10 +1,9 @@
 cmake_minimum_required(VERSION 3.10)
 project(watchman CXX C)
 include(GNUInstallDirs)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-
 
 set(C_SOURCES)
 
@@ -102,12 +101,69 @@ find_package(wangle REQUIRED)
 
 find_path(JEMALLOC_INCLUDE_DIR NAMES jemalloc/jemalloc.h REQUIRED)
 
-include(mcrouter-thrift-codegen.cmake)
+include(FBThriftCppLibrary)
+set(THRIFT_OPTIONS stack_arguments sync_methods_return_try
+                   deprecated_terse_writes)
 
-target_link_libraries(mcrouter mcrouter_thrift_lib Folly::folly boost fizz fmt)
+add_fbthrift_cpp_library(mcrouter_carbon_result_thrift mcrouter/lib/carbon/carbon_result.thrift OPTIONS ${THRIFT_OPTIONS})
+add_fbthrift_cpp_library(mcrouter_carbon_thrift mcrouter/lib/carbon/carbon.thrift OPTIONS ${THRIFT_OPTIONS})
+add_fbthrift_cpp_library(mcrouter_common_thrift mcrouter/lib/network/gen/Common.thrift
+    OPTIONS ${THRIFT_OPTIONS}
+    DEPENDS
+        mcrouter_carbon_thrift
+        mcrouter_carbon_result_thrift
+)
+add_fbthrift_cpp_library(mcrouter_memcache_thrift mcrouter/lib/network/gen/Memcache.thrift
+    OPTIONS ${THRIFT_OPTIONS}
+    DEPENDS
+        mcrouter_carbon_thrift
+        mcrouter_carbon_result_thrift
+        mcrouter_common_thrift
+)
+add_fbthrift_cpp_library(mcrouter_memcache_service_thrift mcrouter/lib/network/gen/MemcacheService.thrift
+    OPTIONS ${THRIFT_OPTIONS}
+    DEPENDS
+        mcrouter_common_thrift
+        mcrouter_memcache_thrift
+    SERVICES
+        Memcache
+)
+
+target_link_libraries(
+    mcrouter
+    mcrouter_carbon_result_thrift
+    mcrouter_carbon_thrift
+    mcrouter_common_thrift
+    mcrouter_memcache_thrift
+    mcrouter_memcache_service_thrift
+    Folly::folly
+    boost
+    fizz
+    fmt
+    FBThrift::thriftcpp2
+    FBThrift::async
+    FBThrift::serverdbginfo
+    FBThrift::transport
+    FBThrift::thriftanyrep
+    FBThrift::thrifttype
+    FBThrift::thrifttyperep
+    FBThrift::thriftprotocol
+    FBThrift::rpcmetadata
+    FBThrift::thriftannotation
+    FBThrift::thriftmetadata
+    FBThrift::concurrency
+    FBThrift::runtime
+    FBThrift::thrift-core
+)
 target_include_directories(mcrouter PUBLIC "${CMAKE_CURRENT_BINARY_DIR}" "${JEMALLOC_INCLUDE_DIR}")
 
 install(
-  TARGETS mcrouter
+  TARGETS
+    mcrouter
+    mcrouter_carbon_result_thrift
+    mcrouter_carbon_thrift
+    mcrouter_common_thrift
+    mcrouter_memcache_thrift
+    mcrouter_memcache_service_thrift
   LIBRARY ARCHIVE DESTINATION ${CMAKE_INSTALL_FULL_LIBDIR}
 )
