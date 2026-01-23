@@ -25,3 +25,10 @@ val check_class_get :
  *)
 val check_instantiation :
   Typing_env_types.env -> Pos.t -> ('ex, 'en) Aast_defs.class_id_ -> unit
+
+(** Validate `<<__NeedsConcrete>>` usage on class members.
+ *  - Errors on instance methods and constructors.
+ *  - Errors on static methods in final classes.
+ *)
+val check_class_def :
+  Typing_env_types.env -> Nast.class_ -> Decl_provider.class_decl -> unit

@@ -1,11 +1,6 @@
 name: Ubuntu CI
 
 on:
-  push:
-    branches-ignore:
-      # Exclude the push event for exported diffs, because the CI for export
-      # should have been covered by GitHub Actions triggered by pull requests.
-      - 'export-D+'
   pull_request:
 
 concurrency:
@@ -25,47 +20,29 @@ env:
   DEBIAN_FRONTEND: "noninteractive"
 
 jobs:
-  build_ubuntu_focal_nightly:
-    runs-on: 16-core
-    container:
-      image: ubuntu:focal
-      env:
-        DISTRO: ubuntu-20.04-focal
-        IS_NIGHTLY: 1
-        CLANG_VERSION: 12
+  build_ubuntu_noble_nightly:
+    timeout-minutes: 660 # 12 hours
+    runs-on: hhvm-builder
     steps:
-    - name: Installing dependencies to bootstrap env
-      run: apt update -y && apt install -y git wget lsb-release software-properties-common gpg
-    - name: Installing llvm
-      run: |
-        wget https://apt.llvm.org/llvm.sh
-        chmod +x llvm.sh
-        # Note: Keep this version in sync with the one in the Debian control file.
-        ./llvm.sh ${CLANG_VERSION}
-    - name: Making LLVM the default compiler
-      run: |
-        if [ -f /etc/alternatives/cc ]
-        then
-          update-alternatives --remove-all cc
-        fi
-
-        if [ -f /etc/alternatives/c++ ]
-        then
-          update-alternatives --remove-all c++
-        fi
-        
-        update-alternatives --install /usr/bin/cc cc /usr/bin/clang++-${CLANG_VERSION} 500
-        update-alternatives --set cc /usr/bin/clang++-${CLANG_VERSION}
-        update-alternatives --install /usr/bin/c++ c++ /usr/bin/clang++-${CLANG_VERSION} 500
-        update-alternatives --set c++ /usr/bin/clang++-${CLANG_VERSION}
-    - name: Fetching HHVM and its submodules
-      uses: actions/checkout@v6
-      with:
-        submodules: 'recursive'
-    - name: Installing HHVM deps and building HHVM
-      run: ci/bin/make-debianish-package
-    - name: Uploading artifacts
-      uses: actions/upload-artifact@v6
-      with:
-        name: out-directory
-        path: ${{ env.OUT }}
+      # The HHVM build requires more disk space than what is available
+      # on a default Actions runner, so remove some cruft.
+      #- name: Free up disk space
+      #  uses: jlumbroso/free-disk-space@v1.3.1
+      - name: Fetching HHVM and its submodules
+        uses: actions/checkout@v6
+        with:
+          submodules: "recursive"
+      - name: Installing HHVM deps and building HHVM
+        uses: docker://ubuntu:noble
+        env:
+          DISTRO: ubuntu-24.04-noble
+          IS_NIGHTLY: 1
+          CLANG_VERSION: 20
+        with:
+          entrypoint: /bin/bash
+          args: ci/bin/make-debianish-package
+      - name: Uploading artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: out-directory
+          path: ${{ env.OUT }}

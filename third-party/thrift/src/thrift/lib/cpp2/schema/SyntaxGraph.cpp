@@ -29,8 +29,6 @@
 #include <queue>
 #include <stdexcept>
 
-#ifdef THRIFT_SCHEMA_AVAILABLE
-
 namespace type = apache::thrift::type;
 namespace protocol = apache::thrift::protocol;
 using apache::thrift::util::enumNameSafe;
@@ -298,6 +296,7 @@ FunctionNode::FunctionNode(
     std::vector<Annotation>&& annotations,
     Response&& response,
     std::string_view name,
+    std::optional<std::string_view> docBlock,
     std::vector<Param>&& params,
     std::vector<Exception>&& exceptions,
     type::FunctionQualifier qualifier,
@@ -305,6 +304,7 @@ FunctionNode::FunctionNode(
     : detail::WithResolver(resolver),
       detail::WithName(name),
       detail::WithAnnotations(std::move(annotations)),
+      detail::WithDocBlock(docBlock),
       parent_(parent),
       response_(std::move(response)),
       params_(std::move(params)),
@@ -1425,5 +1425,3 @@ TypeRef SyntaxGraph::asSyntaxGraphTypeRef(
 }
 
 } // namespace apache::thrift::syntax_graph
-
-#endif // THRIFT_SCHEMA_AVAILABLE

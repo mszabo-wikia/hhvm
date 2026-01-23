@@ -342,8 +342,13 @@ module Primary = struct
       | Cross_pkg_access_with_requirepackage of {
           pos: Pos.t;
           decl_pos: Pos_or_decl.t;
-          current_package_opt: string option;
-          target_package_opt: string option;
+          target_package: string;
+        }
+      | Cross_pkg_access_with_softrequirepackage of {
+          pos: Pos.t;
+          decl_pos: Pos_or_decl.t;
+          current_soft_package_opt: (Pos.t * string) option;
+          target_package: string;
         }
       | Soft_included_access of {
           pos: Pos.t;
@@ -760,6 +765,20 @@ module Primary = struct
         pos: Pos.t;
         class_id: string;
         id: string;
+      }
+    | Needs_concrete_in_final_class of {
+        pos: Pos.t;
+        class_name: string;
+        meth_name: string;
+      }
+    | Needs_concrete_on_instance_method of {
+        pos: Pos.t;
+        class_name: string;
+        meth_name: string;
+      }
+    | Needs_concrete_on_constructor of {
+        pos: Pos.t;
+        class_name: string;
       }
     | Trivial_strict_eq of {
         pos: Pos.t;

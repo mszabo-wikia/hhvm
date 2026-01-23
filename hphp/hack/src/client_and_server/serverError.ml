@@ -12,32 +12,16 @@
 (*****************************************************************************)
 open Hh_prelude
 
-let get_save_state_result_props_json
-    (save_state_result : SaveStateServiceTypes.save_state_result) :
-    (string * Hh_json.json) list =
-  SaveStateServiceTypes.
-    [
-      ( "dep_table_edges_added",
-        Hh_json.int_ save_state_result.dep_table_edges_added );
-    ]
-
-let get_save_state_result_json
-    (save_state_result : SaveStateServiceTypes.save_state_result) :
-    string * Hh_json.json =
-  ( "save_state_result",
-    Hh_json.JSON_Object (get_save_state_result_props_json save_state_result) )
-
 let get_error_list_json
-    (error_format : Errors.format option)
-    (error_list : Errors.finalized_error list)
-    ~(save_state_result : SaveStateServiceTypes.save_state_result option)
+    (error_format : Diagnostics.format option)
+    (error_list : Diagnostics.finalized_diagnostic list)
     ~(recheck_stats : Telemetry.t option) =
-  let error_format = Errors.format_or_default error_format in
+  let error_format = Diagnostics.format_or_default error_format in
   (* for extended reasons, we produce a human-readable format. *)
   let human_formatter =
-    Errors.(
+    Diagnostics.(
       match error_format with
-      | Extended -> Some Extended_error_formatter.to_string
+      | Extended -> Some Extended_diagnostic_formatter.to_string
       | Context
       | Raw
       | Highlighted
@@ -56,7 +40,8 @@ let get_error_list_json
                | Warning -> false))
       in
       ( List.map
-          ~f:(User_error.to_json ~human_formatter ~filename_to_string:Fn.id)
+          ~f:
+            (User_diagnostic.to_json ~human_formatter ~filename_to_string:Fn.id)
           error_list,
         passed )
   in
@@ -68,15 +53,6 @@ let get_error_list_json
     ]
   in
   let properties =
-    match save_state_result with
-    | None -> properties
-    | Some save_state_result ->
-      let save_state_result_json =
-        get_save_state_result_json save_state_result
-      in
-      save_state_result_json :: properties
-  in
-  let properties =
     match recheck_stats with
     | None -> properties
     | Some telemetry ->
@@ -86,17 +62,10 @@ let get_error_list_json
 
 let print_error_list_json
     (oc : Out_channel.t)
-    (error_format : Errors.format option)
-    (error_list : Errors.finalized_error list)
-    (save_state_result : SaveStateServiceTypes.save_state_result option)
+    (error_format : Diagnostics.format option)
+    (error_list : Diagnostics.finalized_diagnostic list)
     (recheck_stats : Telemetry.t option) =
-  let res =
-    get_error_list_json
-      error_format
-      error_list
-      ~save_state_result
-      ~recheck_stats
-  in
+  let res = get_error_list_json error_format error_list ~recheck_stats in
   Hh_json.json_to_output oc res;
   Out_channel.flush oc
 
@@ -104,21 +73,15 @@ let print_error_list
     (oc : Out_channel.t)
     ~(stale_msg : string option)
     ~(output_json : bool)
-    ~(error_format : Errors.format option)
-    ~(error_list : Errors.finalized_error list)
-    ~(save_state_result : SaveStateServiceTypes.save_state_result option)
+    ~(error_format : Diagnostics.format option)
+    ~(error_list : Diagnostics.finalized_diagnostic list)
     ~(recheck_stats : Telemetry.t option) =
   (if output_json then
-    print_error_list_json
-      oc
-      error_format
-      error_list
-      save_state_result
-      recheck_stats
+    print_error_list_json oc error_format error_list recheck_stats
   else if List.is_empty error_list then
     Out_channel.output_string oc "No errors!\n"
   else
-    let sl = List.map ~f:Errors.to_string error_list in
+    let sl = List.map ~f:Diagnostics.to_string error_list in
     let sl = List.dedup_and_sort ~compare:String.compare sl in
     List.iter
       ~f:

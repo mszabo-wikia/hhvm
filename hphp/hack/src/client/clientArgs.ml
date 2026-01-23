@@ -144,7 +144,6 @@ let parse_check_args cmd ~from_default : ClientEnv.client_check_env =
   let from = ref from_default in
   let show_spinner = ref None in
   let show_tast = ref false in
-  let gen_saved_ignore_type_errors = ref false in
   let ignore_hh_version = ref false in
   let save_64bit = ref None in
   let save_human_readable_64bit_dep_map = ref None in
@@ -332,11 +331,11 @@ let parse_check_args cmd ~from_default : ClientEnv.client_check_env =
         Arg.String
           (fun s ->
             match s with
-            | "raw" -> error_format := Some Errors.Raw
-            | "plain" -> error_format := Some Errors.Plain
-            | "context" -> error_format := Some Errors.Context
-            | "highlighted" -> error_format := Some Errors.Highlighted
-            | "extended" -> error_format := Some Errors.Extended
+            | "raw" -> error_format := Some Diagnostics.Raw
+            | "plain" -> error_format := Some Diagnostics.Plain
+            | "context" -> error_format := Some Diagnostics.Context
+            | "highlighted" -> error_format := Some Diagnostics.Highlighted
+            | "extended" -> error_format := Some Diagnostics.Extended
             | _ -> print_string "Warning: unrecognized error format.\n"),
         "<extended|raw|context|highlighted|plain> Error formatting style; (default: highlighted)"
       );
@@ -413,10 +412,6 @@ let parse_check_args cmd ~from_default : ClientEnv.client_check_env =
                 | _ -> raise (Arg.Bad "only a single mode should be specified"))
           end,
         " (mode) for each entry in input list get list of function dependencies [file:line:character list]"
-      );
-      ( "--gen-saved-ignore-type-errors",
-        Arg.Set gen_saved_ignore_type_errors,
-        " generate a saved state even if there are type errors (default: false)."
       );
       ( "--get-method-name",
         Arg.String (fun x -> set_mode (MODE_IDENTIFY_SYMBOL3 x)),
@@ -669,10 +664,6 @@ rewrite to the function names to something like `foo_1` and `foo_2`.
         Arg.String (fun x -> set_mode (MODE_SAVE_NAMING x)),
         " (mode) Save the naming table to the given file."
         ^ " Returns the number of files and symbols written to disk." );
-      ( "--save-state",
-        Arg.String (fun x -> set_mode (MODE_SAVE_STATE x)),
-        " (mode) Save a saved state to the given file."
-        ^ " Returns number of edges dumped from memory to the database." );
       ( "--save-64bit",
         Arg.String (fun x -> save_64bit := Some x),
         " save discovered 64-bit to the given directory" );
@@ -760,32 +751,35 @@ rewrite to the function names to something like `foo_1` and `foo_2`.
         " (mode) turn off verbose server log" );
       ("--version", Arg.Set version, " (mode) show version and exit");
       ( "-Wall",
-        Arg.Unit (fun () -> add_warning_switch Filter_errors.WAll),
+        Arg.Unit (fun () -> add_warning_switch Filter_diagnostics.WAll),
         " show all warnings" );
       ( "-Wnone",
-        Arg.Unit (fun () -> add_warning_switch Filter_errors.WNone),
+        Arg.Unit (fun () -> add_warning_switch Filter_diagnostics.WNone),
         " hide all warnings" );
       ( "-W",
         Arg.Int
           (fun code ->
-            match Filter_errors.Code.of_enum code with
+            match Filter_diagnostics.Code.of_enum code with
             | None -> add_invalid_warning_code code
-            | Some code -> add_warning_switch @@ Filter_errors.Code_on code),
+            | Some code -> add_warning_switch @@ Filter_diagnostics.Code_on code),
         " show all warnings with a given code, e.g. -W 12001" );
       ( "-Wno",
         Arg.Int
           (fun code ->
-            match Filter_errors.Code.of_enum code with
+            match Filter_diagnostics.Code.of_enum code with
             | None -> add_invalid_warning_code code
-            | Some code -> add_warning_switch @@ Filter_errors.Code_off code),
+            | Some code ->
+              add_warning_switch @@ Filter_diagnostics.Code_off code),
         " hide all warnings with a given code, e.g. -Wno 12001" );
       ( "-Wignore-files",
         Arg.String
           (fun regexp ->
-            add_warning_switch (Filter_errors.Ignored_files (Str.regexp regexp))),
+            add_warning_switch
+              (Filter_diagnostics.Ignored_files (Str.regexp regexp))),
         " hide warnings in files matching a regexp" );
       ( "-Wgenerated",
-        Arg.Unit (fun () -> add_warning_switch Filter_errors.Generated_files_on),
+        Arg.Unit
+          (fun () -> add_warning_switch Filter_diagnostics.Generated_files_on),
         " show warnings in generated files" );
       Common_argspecs.watchman_debug_logging watchman_debug_logging;
       (* Please keep these sorted in the alphabetical order *)
@@ -899,7 +893,6 @@ rewrite to the function names to something like `foo_1` and `foo_2`.
     force_dormant_start = !force_dormant_start;
     from = !from;
     show_spinner = Option.value ~default:is_interactive !show_spinner;
-    gen_saved_ignore_type_errors = !gen_saved_ignore_type_errors;
     ignore_hh_version = !ignore_hh_version;
     saved_state_ignore_hhconfig = !saved_state_ignore_hhconfig;
     paths;

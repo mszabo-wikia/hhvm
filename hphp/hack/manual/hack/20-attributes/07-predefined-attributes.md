@@ -20,6 +20,7 @@ The following attributes are defined:
 - [\_\_MemoizeLSB](#__memoizelsb)
 - [\_\_MockClass](#__mockclass)
 - [\_\_ModuleLevelTrait](#__moduleleveltrait)
+- [\_\_NeedsConcrete](#__needsconcrete)
 - [\_\_Newable](#__newable)
 - [\_\_Override](#__override)
 - [\_\_PHPStdLib](#__phpstdlib)
@@ -31,7 +32,7 @@ The following attributes are defined:
 
 This attribute can be applied to a function parameter that has a type that implements interface `IDisposable` or `IAsyncDisposable`.
 
-See [object disposal](/docs/hack/classes/object-disposal) for an example of its use.
+See [object disposal](/hack/classes/object-disposal) for an example of its use.
 
 ## __AutocompleteSortText
 
@@ -150,7 +151,7 @@ dynamic instantiations of classes without this attribute.
 
 This attribute can be applied to a class or trait to enable resolution of traits used along multiple paths.
 
-See [using a trait](/docs/hack/traits-and-interfaces/using-a-trait) for an example of its use.
+See [using a trait](/hack/traits-and-interfaces/using-a-trait) for an example of its use.
 
 
 ## __Enforceable
@@ -332,11 +333,11 @@ function main(): void {
 ```
 
 ### Awaitables and Exceptions
-As memoize caches an [Awaitable](/docs/hack/asynchronous-operations/awaitables) itself, this means that **if an async function
+As memoize caches an [Awaitable](/hack/asynchronous-operations/awaitables) itself, this means that **if an async function
 is memoized and throws, you will get the same exception backtrace on every
 failed call**.
 
-For more information and examples, see [Memoized Async Exceptions](/docs/hack/asynchronous-operations/exceptions#memoized-async-exceptions).
+For more information and examples, see [Memoized Async Exceptions](/hack/asynchronous-operations/exceptions#memoized-async-exceptions).
 
 ## __MemoizeLSB
 
@@ -398,7 +399,88 @@ Mock classes *cannot* extend types `vec`, `dict`, and `keyset`, or the Hack lega
 
 ## __ModuleLevelTrait
 
-Can be used on public traits.  The elements of a trait annotated with `<<__ModuleLevelTrait>>` are considered to belong to the module where the trait is defined, and can access other internal symbols of the module.  For more information see [Traits and Modules](/docs/hack/modules/traits).
+Can be used on public traits.  The elements of a trait annotated with `<<__ModuleLevelTrait>>` are considered to belong to the module where the trait is defined, and can access other internal symbols of the module.  For more information see [Traits and Modules](/hack/modules/traits).
+
+## __NeedsConcrete
+
+This attribute marks a static method that requires the runtime class to be concrete. A class is concrete if all its members are implemented. For example, all non-abstract classes are concrete.
+
+### When you need this attribute
+
+Consider this code that produces a type checker warning:
+
+```hack warning
+abstract class Animal {
+  public static function introduce(): void {
+    echo "I say: ";
+    static::speak(); // Warning: static might refer to an abstract class
+  }
+
+  public static abstract function speak(): void;
+}
+
+class Dog extends Animal {
+  public static function speak(): void {
+    echo "Woof!";
+  }
+}
+
+
+<<__EntryPoint>>
+function main(): void {
+  Animal::introduce(); // runtime error
+}
+
+```
+
+When you call a static method using `static::`, [late static binding](/hack/expressions-and-operators/scope-resolution) determines the class whose method gets called at runtime. The type checker warns here because if `static` refers to an abstract class (like `Animal`), calling `static::speak()` would fail—you can't call an abstract method.
+
+### How to fix the warning
+
+Adding `<<__NeedsConcrete>>` tells the type checker: "This method is only safe to call when the runtime class is concrete." This resolves the warning:
+
+```hack
+abstract class Animal {
+  <<__NeedsConcrete>>
+  public static function introduce(): void {
+    echo "I say: ";
+    static::speak(); // OK because of `__NeedsConcrete` attribute
+  }
+
+  public static abstract function speak(): void;
+}
+
+class Dog extends Animal {
+  public static function speak(): void {
+    echo "Woof!";
+  }
+}
+```
+
+### How the attribute affects call sites
+
+Once you add `<<__NeedsConcrete>>`, the type checker will warn about calls where the receiver class might not be concrete.
+
+```hack warning
+abstract class Animal {
+  <<__NeedsConcrete>>
+  public static function introduce(): void {
+    static::speak();
+  }
+
+  public static abstract function speak(): void;
+}
+
+<<__EntryPoint>>
+function main(): void {
+  Animal::introduce(); // Warning: Animal is not concrete
+}
+```
+
+Safe calls include:
+- Calling on a concrete class directly: `Dog::introduce()`
+- Calling via `static::` from another `<<__NeedsConcrete>>` method
+- Calling from within a concrete class
 
 ## __Newable
 
@@ -412,7 +494,7 @@ function f<<<__Newable>> reify T as A>(): T {
 }
 ```
 
-The class `A` must either be final (as in the example) or annotated with `__ConsistentConstruct`.  The `__Newable` attribute ensures that the function `f` is only be applied to a _non-abstract_ class, say `C`, while the `as A` constraint guarantees that the interface of the constructor of `C` is uniquely determined by the interface of the constructor of class `A`.  The generic type `T` must be reified so that the runtime has access to it, refer to [Generics: Reified Generics](/docs/hack/reified-generics/reified-generics) for details.
+The class `A` must either be final (as in the example) or annotated with `__ConsistentConstruct`.  The `__Newable` attribute ensures that the function `f` is only be applied to a _non-abstract_ class, say `C`, while the `as A` constraint guarantees that the interface of the constructor of `C` is uniquely determined by the interface of the constructor of class `A`.  The generic type `T` must be reified so that the runtime has access to it, refer to [Generics: Reified Generics](/hack/reified-generics/reified-generics) for details.
 
 A complete example thus is:
 
@@ -510,7 +592,7 @@ everywhere with the option `deregister_php_stdlib`.
 
 This attribute can be applied to a function that returns a value whose type implements interface `IDisposable` or `IAsyncDisposable`.
 
-See [object disposal](/docs/hack/classes/object-disposal) for an example of its use.
+See [object disposal](/hack/classes/object-disposal) for an example of its use.
 
 ## __Sealed
 
@@ -536,4 +618,4 @@ Only classes `X` and `Y` can directly extend class `A`, and only class `Z` can d
 
 ## __Soft
 
-Disable type enforcement. See [soft types](/docs/hack/types/soft-types).
+Disable type enforcement. See [soft types](/hack/types/soft-types).

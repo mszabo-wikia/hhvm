@@ -19,7 +19,6 @@ apache::thrift::ServiceHandler<::facebook::thrift::test::fixtures::service_schem
   return ::apache::thrift::detail::ap::createMethodMetadataMap<::facebook::thrift::test::fixtures::service_schema::ExtendedServiceAsyncProcessor>(getServiceRequestInfoMap().value().get());
 }
 
-#if defined(THRIFT_SCHEMA_AVAILABLE)
 std::optional<apache::thrift::schema::DefinitionsSchema> apache::thrift::ServiceHandler<::facebook::thrift::test::fixtures::service_schema::ExtendedService>::getServiceSchema() {
   std::optional<apache::thrift::schema::DefinitionsSchema> ret = schema::DefinitionsSchema{};
   ret->schema = ::apache::thrift::schema::detail::loadBundledSchema(::facebook::thrift::test::fixtures::service_schema::module_constants::_fbthrift_schema_db27c1f89cb27d2_includes());
@@ -30,7 +29,6 @@ std::optional<apache::thrift::schema::DefinitionsSchema> apache::thrift::Service
 std::vector<folly::not_null<const apache::thrift::syntax_graph::ServiceNode*>> apache::thrift::ServiceHandler<::facebook::thrift::test::fixtures::service_schema::ExtendedService>::getServiceSchemaNodes() {
   return {&apache::thrift::SchemaRegistry::get().getNode<::facebook::thrift::test::fixtures::service_schema::ExtendedService>()};
 }
-#endif
 
 std::optional<std::reference_wrapper<apache::thrift::ServiceRequestInfoMap const>> apache::thrift::ServiceHandler<::facebook::thrift::test::fixtures::service_schema::ExtendedService>::getServiceRequestInfoMap() const {
   return __fbthrift_serviceInfoHolder.requestInfoMap();
@@ -241,7 +239,8 @@ apache::thrift::ServiceRequestInfoMap ExtendedServiceServiceInfoHolder::staticRe
      "ExtendedService.init",
      std::nullopt,
      apache::thrift::concurrency::NORMAL,
-     std::nullopt}},
+     std::nullopt,
+     ::apache::thrift::detail::getFunctionNode<::facebook::thrift::test::fixtures::service_schema::ExtendedService>("init")}},
   };
   apache::thrift::ServiceRequestInfoMap parentMap = ::facebook::thrift::test::fixtures::service_schema::BaseServiceServiceInfoHolder::staticRequestInfoMap();
   requestInfoMap.insert(std::begin(parentMap), std::end(parentMap));

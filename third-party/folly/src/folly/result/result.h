@@ -80,6 +80,8 @@
 ///           * `co_await or_unwind(folly::copy(res))`
 ///       - `co_await or_unwind(res) -> T&`. Copies `exception_ptr` on error.
 ///       - `co_await or_unwind(std::as_const(res)) -> const T&`
+///       WARNING: `auto&& ref = co_await or_unwind(rvalueFn())` dangles; search
+///       `result.md` for "LLVM issue #177023".  Safe: `auto val = ...`
 ///       - `co_await stopped_result` or `non_value_result{YourErr{}}` to
 ///         end the coroutine with an error without throwing.
 ///     * In `folly::coro` coroutines:
@@ -209,7 +211,7 @@ class [[nodiscard]] non_value_result {
       const immortal_rich_error_t<rich_exception_ptr, T, Args...>& err)
       : rep_{err.ptr()} {}
 
-  bool has_stopped() const {
+  [[nodiscard]] bool has_stopped() const {
     return bool{::folly::get_exception<OperationCancelled>(rep_)};
   }
 
@@ -278,7 +280,7 @@ class [[nodiscard]] non_value_result {
   /// INVARIANT: Ensure `!has_stopped()`, or you will see a debug-fatal.
   ///
   /// See `from_exception_ptr_slow` for the downsides and the rationale.
-  std::exception_ptr to_exception_ptr_slow() && {
+  [[nodiscard]] std::exception_ptr to_exception_ptr_slow() && {
     auto eptr = std::move(rep_).to_exception_ptr_slow();
     detail::dfatal_if_eptr_empty_or_stopped(eptr);
     return detail::extract_exception_ptr(std::move(eptr));
@@ -393,9 +395,8 @@ class result_crtp {
 
   friend struct result_promise<T>;
   friend struct result_promise_return<T>;
-  friend struct result_await_suspender;
   template <typename, typename>
-  friend class or_unwind_crtp; // `await_suspend` uses `exp_`
+  friend class result_or_unwind_crtp; // `await_suspend` uses `exp_`
 
   friend inline bool operator==(const result_crtp& a, const result_crtp& b) {
     // FIXME: This logic is meant to follow `std::expected`, so once that's in
@@ -465,6 +466,8 @@ class result_crtp {
   ///   - Copying `T` is almost always a performance bug in this setting, but
   ///     see the below carve-out for "cheap-to-copy `T`".
   ///   - Copying `std::exception_ptr` also has atomic costs (~7s).
+  ///
+  /// Future: We may later make `result` copyable, see `docs/design_notes.md`.
   ///
   /// ## Copies are restricted when `T` is a reference
   ///
@@ -537,7 +540,7 @@ class result_crtp {
 
   /***************** Accessors for `T` `void` and non-`void` ******************/
 
-  bool has_value() const { return exp_.hasValue(); }
+  [[nodiscard]] bool has_value() const { return exp_.hasValue(); }
   // Also see `has_stopped()` below!
 
   /// Non-value access should be used SPARINGLY!
@@ -584,7 +587,9 @@ class result_crtp {
   }
 
   // Syntax sugar to minimize the chances that end-users need `non_value()`.
-  bool has_stopped() const { return !has_value() && non_value().has_stopped(); }
+  [[nodiscard]] bool has_stopped() const {
+    return !has_value() && non_value().has_stopped();
+  }
 
   /********************************* Protocols ********************************/
 
@@ -729,25 +734,25 @@ result final : public detail::result_crtp<result<T>, T> {
   }
 
   /// Retrieve non-reference `T`
-  const T& value_or_throw() const&
+  [[nodiscard]] const T& value_or_throw() const&
     requires(!std::is_reference_v<T>)
   {
     this->throw_if_no_value();
     return *this->exp_;
   }
-  T& value_or_throw() &
+  [[nodiscard]] T& value_or_throw() &
     requires(!std::is_reference_v<T>)
   {
     this->throw_if_no_value();
     return *this->exp_;
   }
-  const T&& value_or_throw() const&&
+  [[nodiscard]] const T&& value_or_throw() const&&
     requires(!std::is_reference_v<T>)
   {
     this->throw_if_no_value();
     return *std::move(this->exp_);
   }
-  T&& value_or_throw() &&
+  [[nodiscard]] T&& value_or_throw() &&
     requires(!std::is_reference_v<T>)
   {
     this->throw_if_no_value();
@@ -760,20 +765,20 @@ result final : public detail::result_crtp<result<T>, T> {
   /// wrapper inside `this`.  Assign a ref-wrapper to the `result` to do that.
 
   /// Lvalue result-ref propagate `const`: `const result<T&>` -> `const T&`.
-  /// See a discussion of the trade-offs in `docs/result.md`.
-  like_t<const int&, T> value_or_throw() const&
+  /// See a discussion of the trade-offs in `docs/result.md` & `design_notes.md`
+  [[nodiscard]] like_t<const int&, T> value_or_throw() const&
     requires std::is_lvalue_reference_v<T>
   {
     this->throw_if_no_value();
     return std::as_const(this->exp_->get());
   }
-  T value_or_throw() &
+  [[nodiscard]] T value_or_throw() &
     requires std::is_lvalue_reference_v<T>
   {
     this->throw_if_no_value();
     return this->exp_->get();
   }
-  T value_or_throw() &&
+  [[nodiscard]] T value_or_throw() &&
     requires std::is_lvalue_reference_v<T>
   {
     this->throw_if_no_value();
@@ -782,7 +787,7 @@ result final : public detail::result_crtp<result<T>, T> {
 
   // R-value refs follow `folly::rvalue_reference_wrapper`.  They model
   // single-use references, and thus require `&&` qualification.
-  T value_or_throw() &&
+  [[nodiscard]] T value_or_throw() &&
     requires std::is_rvalue_reference_v<T>
   {
     this->throw_if_no_value();

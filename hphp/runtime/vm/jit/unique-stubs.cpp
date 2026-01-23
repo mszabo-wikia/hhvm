@@ -74,6 +74,10 @@
 #include <folly/Format.h>
 
 #include <algorithm>
+#include <cxxabi.h>
+
+#include <cxxabi.h>
+#include <unwind.h>
 
 namespace HPHP::jit {
 

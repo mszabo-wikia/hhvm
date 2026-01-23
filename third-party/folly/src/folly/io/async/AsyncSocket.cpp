@@ -32,6 +32,7 @@
 #include <folly/io/IOBuf.h>
 #include <folly/io/IOBufQueue.h>
 #include <folly/io/SocketOptionMap.h>
+#include <folly/io/async/IoUringBackend.h>
 #include <folly/lang/CheckedMath.h>
 #include <folly/portability/Fcntl.h>
 #include <folly/portability/Sockets.h>
@@ -145,6 +146,16 @@ class ZeroCopyMMapMemStoreReal : public ZeroCopyMemStore {
 using ZeroCopyMMapMemStore = ZeroCopyMMapMemStoreReal;
 #else
 using ZeroCopyMMapMemStore = ZeroCopyMMapMemStoreFallback;
+#endif
+
+#if FOLLY_HAS_LIBURING
+bool checkIoUringBackend(folly::EventBase* evb) {
+  return dynamic_cast<folly::IoUringBackend*>(evb->getBackend()) != nullptr;
+}
+#else
+bool checkIoUringBackend(folly::EventBase*) {
+  return false;
+}
 #endif
 } // namespace
 
@@ -776,6 +787,7 @@ AsyncSocket::AsyncSocket(AsyncSocket::UniquePtr oldAsyncSocket)
 void AsyncSocket::init() {
   if (eventBase_) {
     eventBase_->dcheckIsInEventBaseThread();
+    useIoUring_ = checkIoUringBackend(eventBase_);
   }
   eventFlags_ = EventHandler::NONE;
   sendTimeout_ = 0;
@@ -790,6 +802,10 @@ void AsyncSocket::init() {
   appBytesReceived_ = 0;
   totalAppBytesScheduledForWrite_ = 0;
   sendMsgParamCallback_ = &defaultSendMsgParamsCallback;
+  if (useIoUring_ && state_ == StateEnum::ESTABLISHED) {
+    assert(iouSendHandle_ == nullptr);
+    iouSendHandle_ = IoUringSendHandle::create(eventBase_, fd_, addr_, this);
+  }
 }
 
 AsyncSocket::~AsyncSocket() {
@@ -1047,6 +1063,12 @@ void AsyncSocket::connect(
     // Perform the connect()
     address.getAddress(&addrStorage);
 
+    assert(eventBase_ != nullptr);
+    if (useIoUring_ && !iouSendHandle_) {
+      iouSendHandle_ =
+          IoUringSendHandle::create(eventBase_, fd_, address, this);
+    }
+
     if (tfoInfo_.enabled) {
       state_ = StateEnum::FAST_OPEN;
       tfoInfo_.attempted = true;
@@ -1077,9 +1099,18 @@ void AsyncSocket::connect(
   VLOG(8) << "AsyncSocket::connect succeeded immediately; this=" << this;
   assert(errMessageCallback_ == nullptr);
   assert(readCallback_ == nullptr);
-  assert(writeReqHead_ == nullptr);
+  assert(!hasPendingWrites());
+  assert(iouConnectHandle_ == nullptr);
   if (state_ != StateEnum::FAST_OPEN) {
     state_ = StateEnum::ESTABLISHED;
+    if (useIoUring_ && netops_->set_socket_blocking(fd_)) {
+      auto errnoCopy = errno;
+      AsyncSocketException tex(
+          AsyncSocketException::INTERNAL_ERROR,
+          withAddr("failed to restore socket in blocking mode"),
+          errnoCopy);
+      return failConnect(__func__, tex);
+    }
   }
   invokeConnectSuccess();
 }
@@ -1089,8 +1120,13 @@ int AsyncSocket::socketConnect(const struct sockaddr* saddr, socklen_t len) {
   if (rv < 0) {
     auto errnoCopy = errno;
     if (errnoCopy == EINPROGRESS) {
-      scheduleConnectTimeout();
-      registerForConnectEvents();
+      if (!useIoUring_) {
+        scheduleConnectTimeout();
+        registerForConnectEvents();
+      } else {
+        iouConnectHandle_ = IoUringConnectHandle::create(
+            eventBase_, fd_, this, connectTimeout_);
+      }
     } else {
       throw AsyncSocketException(
           AsyncSocketException::NOT_OPEN,
@@ -1176,6 +1212,7 @@ void AsyncSocket::setSendTimeout(uint32_t milliseconds) {
 }
 
 void AsyncSocket::setErrMessageCB(ErrMessageCallback* callback) {
+  CHECK(!useIoUring_);
   VLOG(6) << "AsyncSocket::setErrMessageCB() this=" << this << ", fd=" << fd_
           << ", callback=" << callback << ", state=" << state_;
 
@@ -1245,6 +1282,7 @@ AsyncSocket::ErrMessageCallback* AsyncSocket::getErrMessageCallback() const {
 }
 
 void AsyncSocket::setReadAncillaryDataCB(ReadAncillaryDataCallback* callback) {
+  CHECK(!useIoUring_);
   VLOG(6) << "AsyncSocket::setReadAncillaryDataCB() this=" << this << ", fd="
           << fd_ << ", callback=" << callback << ", state=" << state_;
 
@@ -1322,6 +1360,11 @@ void AsyncSocket::setReadCB(ReadCallback* callback) {
       uint16_t oldFlags = eventFlags_;
       if (readCallback_) {
         eventFlags_ |= EventHandler::READ;
+        if (useIoUring_ && !iouRecvHandle_) {
+          iouRecvHandle_ =
+              IoUringRecvHandle::create(eventBase_, fd_, addr_, this);
+          CHECK(iouRecvHandle_);
+        }
       } else {
         eventFlags_ &= ~EventHandler::READ;
       }
@@ -1361,6 +1404,7 @@ AsyncSocket::ReadCallback* AsyncSocket::getReadCallback() const {
 }
 
 bool AsyncSocket::setZeroCopy(bool enable) {
+  CHECK(!useIoUring_ || !enable);
   if (msgErrQueueSupported) {
     zeroCopyVal_ = enable;
 
@@ -1591,6 +1635,14 @@ void AsyncSocket::enableByteEvents() {
 
   try {
 #if FOLLY_HAVE_SO_TIMESTAMPING
+    if (useIoUring_) {
+      throw AsyncSocketException(
+          AsyncSocketException::NOT_SUPPORTED,
+          withAddr(
+              "failed to enable byte events: "
+              "EVB is using io_uring"));
+    }
+
     // make sure we have a connected IP socket that supports error queues
     // (Unix sockets do not support error queues)
     if (NetworkSocket() == fd_ || !good()) {
@@ -1881,10 +1933,11 @@ void AsyncSocket::writeImpl(
   bool mustRegister = false;
   if ((state_ == StateEnum::ESTABLISHED || state_ == StateEnum::FAST_OPEN) &&
       !connecting()) {
-    if (writeReqHead_ == nullptr) {
+    if (!hasPendingWrites()) {
       // If we are established and there are no other writes pending,
       // we can attempt to perform the write immediately.
       assert(writeReqTail_ == nullptr);
+      assert(iouSendHandle_ ? iouSendHandle_->empty() : true);
       assert((eventFlags_ & EventHandler::WRITE) == 0);
 
       callbackWithState.notifyOnWrite();
@@ -1940,32 +1993,52 @@ void AsyncSocket::writeImpl(
     return invalidState(callback);
   }
 
-  // Create a new WriteRequest to add to the queue
-  WriteRequest* req;
-  try {
-    req = BytesWriteRequest::newRequest(
-        this,
-        callbackWithState,
+  if (!useIoUring_) {
+    // Create a new WriteRequest to add to the queue
+    WriteRequest* req;
+    try {
+      req = BytesWriteRequest::newRequest(
+          this,
+          callbackWithState,
+          vec + countWritten,
+          uint32_t(count - countWritten),
+          partialWritten,
+          uint32_t(bytesWritten),
+          std::move(ioBuf),
+          flags);
+    } catch (const std::exception& ex) {
+      // we mainly expect to catch std::bad_alloc here
+      AsyncSocketException tex(
+          AsyncSocketException::INTERNAL_ERROR,
+          withAddr(string("failed to append new WriteRequest: ") + ex.what()));
+      return failWrite(__func__, callback, size_t(bytesWritten), tex);
+    }
+    req->consume();
+    if (writeReqTail_ == nullptr) {
+      assert(writeReqHead_ == nullptr);
+      writeReqHead_ = writeReqTail_ = req;
+    } else {
+      writeReqTail_->append(req);
+      writeReqTail_ = req;
+    }
+  } else {
+    auto cb = callback ? callback->getReleaseIOBufCallback() : nullptr;
+    if (ioBuf) {
+      for (uint32_t i = countWritten; i != 0; --i) {
+        assert(ioBuf);
+        auto next = ioBuf->pop();
+        releaseIOBuf(std::move(ioBuf), cb);
+        ioBuf = std::move(next);
+      }
+    }
+    iouSendHandle_->write(
+        callback,
         vec + countWritten,
-        uint32_t(count - countWritten),
+        count - countWritten,
         partialWritten,
-        uint32_t(bytesWritten),
+        bytesWritten,
         std::move(ioBuf),
         flags);
-  } catch (const std::exception& ex) {
-    // we mainly expect to catch std::bad_alloc here
-    AsyncSocketException tex(
-        AsyncSocketException::INTERNAL_ERROR,
-        withAddr(string("failed to append new WriteRequest: ") + ex.what()));
-    return failWrite(__func__, callback, size_t(bytesWritten), tex);
-  }
-  req->consume();
-  if (writeReqTail_ == nullptr) {
-    assert(writeReqHead_ == nullptr);
-    writeReqHead_ = writeReqTail_ = req;
-  } else {
-    writeReqTail_->append(req);
-    writeReqTail_ = req;
   }
 
   if (bufferCallback_) {
@@ -2022,7 +2095,7 @@ void AsyncSocket::close() {
   //
   // We only need to drain pending writes if we are still in STATE_CONNECTING
   // or STATE_ESTABLISHED
-  if ((writeReqHead_ == nullptr) ||
+  if ((!hasPendingWrites()) ||
       !(state_ == StateEnum::CONNECTING || state_ == StateEnum::ESTABLISHED)) {
     closeNow();
     return;
@@ -2067,6 +2140,11 @@ void AsyncSocket::closeNow() {
     eventBase_->dcheckIsInEventBaseThread();
   }
 
+  if (iouRecvHandle_) {
+    iouRecvHandle_->cancel();
+    iouRecvHandle_.reset();
+  }
+
   switch (state_) {
     case StateEnum::ESTABLISHED:
     case StateEnum::CONNECTING:
@@ -2097,6 +2175,13 @@ void AsyncSocket::closeNow() {
       }
 
       invokeConnectErr(getSocketClosedLocallyEx());
+      if (iouConnectHandle_) {
+        if (iouConnectHandle_->cancel()) {
+          iouConnectHandle_.release();
+        } else {
+          iouConnectHandle_.reset();
+        }
+      }
 
       failAllWrites(getSocketClosedLocallyEx());
 
@@ -2120,7 +2205,7 @@ void AsyncSocket::closeNow() {
       assert(eventFlags_ == EventHandler::NONE);
       assert(connectCallback_ == nullptr);
       assert(readCallback_ == nullptr);
-      assert(writeReqHead_ == nullptr);
+      assert(!hasPendingWrites());
       shutdownFlags_ |= (SHUT_READ | SHUT_WRITE);
       state_ = StateEnum::CLOSED;
       return;
@@ -2152,7 +2237,7 @@ void AsyncSocket::shutdownWrite() {
 
   // If there are no pending writes, shutdownWrite() is identical to
   // shutdownWriteNow().
-  if (writeReqHead_ == nullptr) {
+  if (!hasPendingWrites()) {
     shutdownWriteNow();
     return;
   }
@@ -2319,6 +2404,19 @@ void AsyncSocket::attachEventBase(EventBase* eventBase) {
   eventBase->dcheckIsInEventBaseThread();
 
   eventBase_ = eventBase;
+  if (useIoUring_) {
+    if (eventFlags_ & EventHandler::READ) {
+      CHECK(iouRecvHandle_ != nullptr);
+      CHECK(readCallback_ != nullptr);
+      iouRecvHandle_ = IoUringRecvHandle::clone(
+          eventBase, fd_, addr_, this, std::move(iouRecvHandle_));
+    }
+    if (iouSendHandle_) {
+      iouSendHandle_ =
+          IoUringSendHandle::clone(eventBase, std::move(iouSendHandle_));
+    }
+  }
+
   ioHandler_.attachEventBase(eventBase);
 
   updateEventRegistration();
@@ -2353,6 +2451,17 @@ void AsyncSocket::detachEventBase() {
   EventBase* existingEvb = eventBase_;
 
   eventBase_ = nullptr;
+
+  if (useIoUring_) {
+    if (iouRecvHandle_) {
+      iouRecvHandle_->detachEventBase();
+    }
+
+    if (iouSendHandle_) {
+      iouSendHandle_->update(EventHandler::NONE);
+      iouSendHandle_->detachEventBase();
+    }
+  }
 
   ioHandler_.unregisterHandler();
 
@@ -3338,33 +3447,14 @@ AsyncSocket::ReadCode AsyncSocket::processNormalRead() {
     // No more data to read right now.
     return ReadCode::READ_DONE;
   } else if (bytesRead == READ_ERROR) {
-    readErr_ = READ_ERROR;
-    if (readResult.exception) {
-      return failRead(__func__, *readResult.exception);
-    }
     auto errnoCopy = errno;
-    AsyncSocketException ex(
-        AsyncSocketException::INTERNAL_ERROR,
-        withAddr("recv() failed"),
-        errnoCopy);
-    return failRead(__func__, ex);
+    recvErr(errnoCopy, std::move(readResult.exception));
+    return AsyncSocket::ReadCode::READ_DONE;
   } else if (bytesRead == READ_ASYNC) {
     return ReadCode::READ_DONE;
   } else {
     assert(bytesRead == READ_EOF);
-    readErr_ = READ_EOF;
-    // EOF
-    shutdownFlags_ |= SHUT_READ;
-    if (!updateEventRegistration(0, EventHandler::READ)) {
-      // we've already been moved into STATE_ERROR
-      assert(state_ == StateEnum::ERROR);
-      assert(readCallback_ == nullptr);
-      return ReadCode::READ_DONE;
-    }
-
-    ReadCallback* callback = readCallback_;
-    readCallback_ = nullptr;
-    callback->readEOF();
+    recvEOF();
     return ReadCode::READ_DONE;
   }
 }
@@ -3471,53 +3561,7 @@ void AsyncSocket::handleWrite() noexcept {
 
       if (writeReqHead_ == nullptr) {
         writeReqTail_ = nullptr;
-        // This is the last write request.
-        // Unregister for write events and cancel the send timer
-        // before we invoke the callback.  We have to update the state
-        // properly before calling the callback, since it may want to detach
-        // us from the EventBase.
-        if (eventFlags_ & EventHandler::WRITE) {
-          if (!updateEventRegistration(0, EventHandler::WRITE)) {
-            assert(state_ == StateEnum::ERROR);
-            return;
-          }
-          // Stop the send timeout
-          writeTimeout_.cancelTimeout();
-        }
-        assert(!writeTimeout_.isScheduled());
-
-        // If SHUT_WRITE_PENDING is set, we should shutdown the socket after
-        // we finish sending the last write request.
-        //
-        // We have to do this before invoking writeSuccess(), since
-        // writeSuccess() may detach us from our EventBase.
-        if (shutdownFlags_ & SHUT_WRITE_PENDING) {
-          assert(connectCallback_ == nullptr);
-          shutdownFlags_ |= SHUT_WRITE;
-
-          if (shutdownFlags_ & SHUT_READ) {
-            // Reads have already been shutdown.  Fully close the socket and
-            // move to STATE_CLOSED.
-            //
-            // Note: This code currently moves us to STATE_CLOSED even if
-            // close() hasn't ever been called.  This can occur if we have
-            // received EOF from the peer and shutdownWrite() has been called
-            // locally.  Should we bother staying in STATE_ESTABLISHED in this
-            // case, until close() is actually called?  I can't think of a
-            // reason why we would need to do so.  No other operations besides
-            // calling close() or destroying the socket can be performed at
-            // this point.
-            assert(readCallback_ == nullptr);
-            state_ = StateEnum::CLOSED;
-            if (fd_ != NetworkSocket()) {
-              ioHandler_.changeHandlerFD(NetworkSocket());
-              doClose();
-            }
-          } else {
-            // Reads are still enabled, so we are only doing a half-shutdown
-            netops_->shutdown(fd_, SHUT_WR);
-          }
-        }
+        sendDone();
       }
 
       // Invoke the callback
@@ -3530,34 +3574,9 @@ void AsyncSocket::handleWrite() noexcept {
     } else {
       // Partial write.
       writeReqHead_->consume();
-      if (bufferCallback_) {
-        bufferCallback_->onEgressBuffered();
-      }
-      // Stop after a partial write; it's highly likely that a subsequent
-      // write attempt will just return EAGAIN.
-      //
-      // Ensure that we are registered for write events.
-      if ((eventFlags_ & EventHandler::WRITE) == 0) {
-        if (!updateEventRegistration(EventHandler::WRITE, 0)) {
-          assert(state_ == StateEnum::ERROR);
-          return;
-        }
-      }
-
-      // Reschedule the send timeout, since we have made some write progress.
-      if (sendTimeout_ > 0) {
-        if (!writeTimeout_.scheduleTimeout(sendTimeout_)) {
-          AsyncSocketException ex(
-              AsyncSocketException::INTERNAL_ERROR,
-              withAddr("failed to reschedule write timeout"));
-          return failWrite(__func__, ex);
-        }
-      }
+      sendPartial();
       return;
     }
-  }
-  if (!writeReqHead_ && bufferCallback_) {
-    bufferCallback_->onEgressBufferCleared();
   }
 }
 
@@ -3578,8 +3597,27 @@ void AsyncSocket::checkForImmediateRead() noexcept {
   //
   // The exception to this is if we have pre-received data. In that case there
   // is definitely data available immediately.
+  EventBase* originalEventBase = eventBase_;
   if (preReceivedData_ && !preReceivedData_->empty()) {
-    handleRead();
+    // Even with io_uring requiring ReadCallbacks to take IOBufs via
+    // readBufferAvailable, if the ReadCallback is a small (peeking) read, go
+    // through the normal handleRead() path with
+    // getReadBuffer()/readBufferAvailable().
+    if (iouRecvHandle_ &&
+        readCallback_->maxBufferSize() >= IoUringRecvHandle::kSmallRecvSize) {
+      readCallback_->readBufferAvailable(std::move(preReceivedData_));
+    } else {
+      handleRead();
+    }
+  }
+
+  if (iouRecvHandle_ && readCallback_ && eventBase_ == originalEventBase &&
+      iouRecvHandle_->hasQueuedData()) {
+    readCallback_->readBufferAvailable(iouRecvHandle_->getQueuedData());
+  }
+
+  if (iouRecvHandle_ && readCallback_ && eventBase_ == originalEventBase) {
+    iouRecvHandle_->submit(readCallback_->maxBufferSize());
   }
 }
 
@@ -3594,6 +3632,10 @@ void AsyncSocket::handleInitialReadWrite() noexcept {
   if (readCallback_ && !(eventFlags_ & EventHandler::READ)) {
     assert(state_ == StateEnum::ESTABLISHED);
     assert((shutdownFlags_ & SHUT_READ) == 0);
+    if (useIoUring_ && !iouRecvHandle_) {
+      iouRecvHandle_ = IoUringRecvHandle::create(eventBase_, fd_, addr_, this);
+      CHECK(iouRecvHandle_);
+    }
     if (!updateEventRegistration(EventHandler::READ, 0)) {
       assert(state_ == StateEnum::ERROR);
       return;
@@ -3614,10 +3656,20 @@ void AsyncSocket::handleInitialReadWrite() noexcept {
   if (writeReqHead_ && !(eventFlags_ & EventHandler::WRITE)) {
     // Call handleWrite() to perform write processing.
     handleWrite();
+  } else if (iouSendHandle_ && !iouSendHandle_->empty()) {
+    updateEventRegistration(EventHandler::WRITE, 0);
   } else if (writeReqHead_ == nullptr) {
     // Unregister for write event.
     updateEventRegistration(0, EventHandler::WRITE);
   }
+}
+
+bool AsyncSocket::hasPendingWrites() noexcept {
+  if (useIoUring_) {
+    return iouSendHandle_ && !iouSendHandle_->empty();
+  }
+
+  return writeReqHead_ != nullptr;
 }
 
 void AsyncSocket::handleConnect() noexcept {
@@ -3629,13 +3681,15 @@ void AsyncSocket::handleConnect() noexcept {
   // finishes
   assert((shutdownFlags_ & SHUT_WRITE) == 0);
 
-  // In case we had a connect timeout, cancel the timeout
-  writeTimeout_.cancelTimeout();
-  // We don't use a persistent registration when waiting on a connect event,
-  // so we have been automatically unregistered now.  Update eventFlags_ to
-  // reflect reality.
-  assert(eventFlags_ == EventHandler::WRITE);
-  eventFlags_ = EventHandler::NONE;
+  if (!useIoUring_) {
+    // In case we had a connect timeout, cancel the timeout
+    writeTimeout_.cancelTimeout();
+    // We don't use a persistent registration when waiting on a connect event,
+    // so we have been automatically unregistered now.  Update eventFlags_ to
+    // reflect reality.
+    assert(eventFlags_ == EventHandler::WRITE);
+    eventFlags_ = EventHandler::NONE;
+  }
 
   // Call getsockopt() to check if the connect succeeded
   int error;
@@ -3662,10 +3716,18 @@ void AsyncSocket::handleConnect() noexcept {
 
   // Move into STATE_ESTABLISHED
   state_ = StateEnum::ESTABLISHED;
+  if (useIoUring_ && netops_->set_socket_blocking(fd_)) {
+    auto errnoCopy = errno;
+    AsyncSocketException tex(
+        AsyncSocketException::INTERNAL_ERROR,
+        withAddr("failed to restore socket in blocking mode"),
+        errnoCopy);
+    return failConnect(__func__, tex);
+  }
 
   // If SHUT_WRITE_PENDING is set and we don't have any write requests to
   // perform, immediately shutdown the write half of the socket.
-  if ((shutdownFlags_ & SHUT_WRITE_PENDING) && writeReqHead_ == nullptr) {
+  if ((shutdownFlags_ & SHUT_WRITE_PENDING) && !hasPendingWrites()) {
     // SHUT_READ shouldn't be set.  If close() is called on the socket while
     // we are still connecting we just abort the connect rather than waiting
     // for it to complete.
@@ -3943,6 +4005,15 @@ AsyncSocket::WriteResult AsyncSocket::sendSocketMessage(
     if (totalWritten >= 0) {
       tfoInfo_.finished = true;
       state_ = StateEnum::ESTABLISHED;
+      if (useIoUring_ && netops_->set_socket_blocking(fd_)) {
+        auto errnoCopy = errno;
+        AsyncSocketException ex(
+            AsyncSocketException::INTERNAL_ERROR,
+            withAddr("failed to restore socket in blocking mode"),
+            errnoCopy);
+        return WriteResult(
+            WRITE_ERROR, std::make_unique<AsyncSocketException>(ex));
+      }
       // We schedule this asynchronously so that we don't end up
       // invoking initial read or write while a write is in progress.
       scheduleInitialReadWrite();
@@ -3953,8 +4024,13 @@ AsyncSocket::WriteResult AsyncSocket::sendSocketMessage(
       // cookie.
       state_ = StateEnum::CONNECTING;
       try {
-        scheduleConnectTimeout();
-        registerForConnectEvents();
+        if (!useIoUring_) {
+          scheduleConnectTimeout();
+          registerForConnectEvents();
+        } else {
+          iouConnectHandle_ = IoUringConnectHandle::create(
+              eventBase_, fd_, this, connectTimeout_);
+        }
       } catch (const AsyncSocketException& ex) {
         return WriteResult(
             WRITE_ERROR, std::make_unique<AsyncSocketException>(ex));
@@ -3972,6 +4048,15 @@ AsyncSocket::WriteResult AsyncSocket::sendSocketMessage(
           // connect succeeded immediately
           // Treat this like no data was written.
           state_ = StateEnum::ESTABLISHED;
+          if (useIoUring_ && netops_->set_socket_blocking(fd_)) {
+            auto errnoCopy = errno;
+            AsyncSocketException ex(
+                AsyncSocketException::INTERNAL_ERROR,
+                withAddr("failed to restore socket in blocking mode"),
+                errnoCopy);
+            return WriteResult(
+                WRITE_ERROR, std::make_unique<AsyncSocketException>(ex));
+          }
           scheduleInitialReadWrite();
         }
         // If there was no exception during connections,
@@ -4064,6 +4149,16 @@ bool AsyncSocket::updateEventRegistration() {
   VLOG(5) << "AsyncSocket::updateEventRegistration(this=" << this
           << ", fd=" << fd_ << ", evb=" << eventBase_ << ", state=" << state_
           << ", events=" << std::hex << eventFlags_;
+  if (useIoUring_) {
+    if (iouSendHandle_) {
+      iouSendHandle_->update(eventFlags_);
+    }
+    if (iouRecvHandle_) {
+      iouRecvHandle_->update(eventFlags_);
+    }
+    return true;
+  }
+
   if (eventFlags_ == EventHandler::NONE) {
     if (ioHandler_.isHandlerRegistered()) {
       DCHECK(eventBase_ != nullptr);
@@ -4117,6 +4212,12 @@ void AsyncSocket::startFail() {
 
   if (eventFlags_ != EventHandler::NONE) {
     eventFlags_ = EventHandler::NONE;
+    if (iouSendHandle_) {
+      iouSendHandle_->update(eventFlags_);
+    }
+    if (iouRecvHandle_) {
+      iouRecvHandle_->update(eventFlags_);
+    }
     ioHandler_.unregisterHandler();
   }
   writeTimeout_.cancelTimeout();
@@ -4213,6 +4314,11 @@ void AsyncSocket::failWrite(const char* fn, const AsyncSocketException& ex) {
           << "): failed while writing in " << fn << "(): " << ex.what();
   startFail();
 
+  if (iouSendHandle_) {
+    assert(writeReqHead_ == nullptr);
+    iouSendHandle_->failWrite(ex);
+  }
+
   // Only invoke the first write callback, since the error occurred while
   // writing this request.  Let any other pending write callbacks be invoked
   // in finishFail().
@@ -4254,6 +4360,11 @@ void AsyncSocket::failWrite(
 }
 
 void AsyncSocket::failAllWrites(const AsyncSocketException& ex) {
+  if (iouSendHandle_) {
+    assert(writeReqHead_ == nullptr);
+    assert(iouSendHandle_ != nullptr);
+    iouSendHandle_->failAllWrites(ex);
+  }
   // Invoke writeError() on all write callbacks.
   // This is used when writes are forcibly shutdown with write requests
   // pending, or when an error occurs with writes pending.
@@ -4562,6 +4673,170 @@ void AsyncSocket::setTosOrTrafficClass(int tosOrTrafficClass) {
 
 void AsyncSocket::setBufferCallback(BufferCallback* cb) {
   bufferCallback_ = cb;
+}
+
+void AsyncSocket::connectSuccess() {
+  DestructorGuard dg(this);
+  iouConnectHandle_.reset();
+  handleConnect();
+}
+
+void AsyncSocket::connectTimeout() {
+  DestructorGuard dg(this);
+  if (iouConnectHandle_->cancel()) {
+    iouConnectHandle_.release();
+  } else {
+    iouConnectHandle_.reset();
+  }
+  timeoutExpired();
+}
+
+void AsyncSocket::sendPartial(size_t bytesWritten) {
+  DestructorGuard dg(this);
+  // Only non-zero for io_uring.
+  appBytesWritten_ += bytesWritten;
+  rawBytesWritten_ += bytesWritten;
+
+  if (bufferCallback_) {
+    bufferCallback_->onEgressBuffered();
+  }
+  // Stop after a partial write; it's highly likely that a subsequent
+  // write attempt will just return EAGAIN.
+  //
+  // Ensure that we are registered for write events.
+  if (!useIoUring_ && (eventFlags_ & EventHandler::WRITE) == 0) {
+    if (!updateEventRegistration(EventHandler::WRITE, 0)) {
+      assert(state_ == StateEnum::ERROR);
+      return;
+    }
+  }
+
+  // Reschedule the send timeout, since we have made some write progress.
+  if (sendTimeout_ > 0) {
+    if (!writeTimeout_.scheduleTimeout(sendTimeout_)) {
+      AsyncSocketException ex(
+          AsyncSocketException::INTERNAL_ERROR,
+          withAddr("failed to reschedule write timeout"));
+      return failWrite(__func__, ex);
+    }
+  }
+  return;
+}
+
+void AsyncSocket::sendDone(size_t bytesWritten) {
+  DestructorGuard dg(this);
+  // Only non-zero for io_uring.
+  appBytesWritten_ += bytesWritten;
+  rawBytesWritten_ += bytesWritten;
+
+  // This is the last write request.
+  // Unregister for write events and cancel the send timer
+  // before we invoke the callback.  We have to update the state
+  // properly before calling the callback, since it may want to detach
+  // us from the EventBase.
+  if (eventFlags_ & EventHandler::WRITE) {
+    if (!updateEventRegistration(0, EventHandler::WRITE)) {
+      assert(state_ == StateEnum::ERROR);
+      return;
+    }
+    // Stop the send timeout
+    writeTimeout_.cancelTimeout();
+  }
+  assert(!writeTimeout_.isScheduled());
+
+  // If SHUT_WRITE_PENDING is set, we should shutdown the socket after
+  // we finish sending the last write request.
+  //
+  // We have to do this before invoking writeSuccess(), since
+  // writeSuccess() may detach us from our EventBase.
+  if (shutdownFlags_ & SHUT_WRITE_PENDING) {
+    assert(connectCallback_ == nullptr);
+    shutdownFlags_ |= SHUT_WRITE;
+
+    if (shutdownFlags_ & SHUT_READ) {
+      // Reads have already been shutdown.  Fully close the socket and
+      // move to STATE_CLOSED.
+      //
+      // Note: This code currently moves us to STATE_CLOSED even if
+      // close() hasn't ever been called.  This can occur if we have
+      // received EOF from the peer and shutdownWrite() has been called
+      // locally.  Should we bother staying in STATE_ESTABLISHED in this
+      // case, until close() is actually called?  I can't think of a
+      // reason why we would need to do so.  No other operations besides
+      // calling close() or destroying the socket can be performed at
+      // this point.
+      assert(readCallback_ == nullptr);
+      state_ = StateEnum::CLOSED;
+      if (fd_ != NetworkSocket()) {
+        ioHandler_.changeHandlerFD(NetworkSocket());
+        doClose();
+      }
+    } else {
+      // Reads are still enabled, so we are only doing a half-shutdown
+      netops_->shutdown(fd_, SHUT_WR);
+    }
+  }
+
+  if (!hasPendingWrites() && bufferCallback_) {
+    bufferCallback_->onEgressBufferCleared();
+  }
+}
+
+void AsyncSocket::sendErr(int err) {
+  DestructorGuard dg(this);
+  AsyncSocketException ex(
+      AsyncSocketException::INTERNAL_ERROR,
+      withAddr("async sendmsg() failed"),
+      err);
+  failWrite(__func__, ex);
+}
+
+void AsyncSocket::recvSuccess(std::unique_ptr<IOBuf> buf) {
+  DestructorGuard dg(this);
+  DCHECK(readAncillaryDataCallback_ == nullptr);
+  CHECK(readCallback_);
+
+  if (preReceivedData_ && !preReceivedData_->empty()) {
+    preReceivedData_->appendToChain(std::move(buf));
+    auto bytes = preReceivedData_->computeChainDataLength();
+    readCallback_->readBufferAvailable(std::move(preReceivedData_));
+    appBytesReceived_ += bytes;
+    return;
+  }
+
+  auto bytes = buf->computeChainDataLength();
+  readCallback_->readBufferAvailable(std::move(buf));
+  appBytesReceived_ += bytes;
+}
+
+void AsyncSocket::recvEOF() noexcept {
+  DestructorGuard dg(this);
+  readErr_ = READ_EOF;
+  // EOF
+  shutdownFlags_ |= SHUT_READ;
+  if (!updateEventRegistration(0, EventHandler::READ)) {
+    // we've already been moved into STATE_ERROR
+    assert(state_ == StateEnum::ERROR);
+    assert(readCallback_ == nullptr);
+    return;
+  }
+
+  ReadCallback* callback = readCallback_;
+  readCallback_ = nullptr;
+  callback->readEOF();
+}
+
+void AsyncSocket::recvErr(
+    int err, std::unique_ptr<const AsyncSocketException> exception) noexcept {
+  DestructorGuard dg(this);
+  readErr_ = READ_ERROR;
+  if (exception) {
+    failRead(__func__, *exception);
+    return;
+  }
+  AsyncSocketException ex(
+      AsyncSocketException::INTERNAL_ERROR, withAddr("recv() failed"), err);
+  failRead(__func__, ex);
 }
 
 std::ostream& operator<<(

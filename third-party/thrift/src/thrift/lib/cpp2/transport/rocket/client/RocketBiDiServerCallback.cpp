@@ -81,7 +81,7 @@ void RocketBiDiServerCallback::onInitialError(folly::exception_wrapper ew) {
       client_.sendError(streamId_, RocketException(ErrorCode::CANCELED));
 }
 
-void RocketBiDiServerCallback::onSinkRequestN(uint64_t tokens) {
+void RocketBiDiServerCallback::onSinkRequestN(int32_t tokens) {
   if (state_.sinkAlive()) {
     std::ignore = clientCallback_->onSinkRequestN(tokens);
   }
@@ -94,7 +94,7 @@ void RocketBiDiServerCallback::onSinkCancel() {
   }
 }
 
-bool RocketBiDiServerCallback::onStreamRequestN(uint64_t tokens) {
+bool RocketBiDiServerCallback::onStreamRequestN(int32_t tokens) {
   return client_.sendRequestN(streamId_, tokens);
 }
 

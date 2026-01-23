@@ -1358,6 +1358,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "diagnostics_ffi"
+version = "0.0.0"
+dependencies = [
+ "ocamlrep_ocamlpool",
+ "oxidized",
+]
+
+[[package]]
+name = "diagnostics_rs"
+version = "0.0.0"
+dependencies = [
+ "ansi_term",
+ "oxidized",
+ "rc_pos",
+ "relative_path",
+ "serde",
+ "serde_derive",
+ "serde_json",
+]
+
+[[package]]
 name = "diff"
 version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1711,14 +1732,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "errors_ffi"
-version = "0.0.0"
-dependencies = [
- "ocamlrep_ocamlpool",
- "oxidized",
-]
-
-[[package]]
 name = "escaper"
 version = "0.0.0"
 dependencies = [
@@ -1977,6 +1990,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "cc",
+ "clap 4.5.20",
  "convert_case 0.4.0",
  "nom 8.0.0",
 ]
@@ -2515,6 +2529,18 @@ dependencies = [
  "anyhow",
  "hhvm_options",
  "options",
+]
+
+[[package]]
+name = "hhvm_ffi"
+version = "0.0.0"
+dependencies = [
+ "compiler_ffi",
+ "hdf",
+ "hhvm_hhbc_defs_ffi",
+ "hhvm_types_ffi",
+ "package_ffi",
+ "parser_ffi",
 ]
 
 [[package]]
@@ -3435,7 +3461,7 @@ dependencies = [
  "bumpalo",
  "indexmap 2.12.1",
  "ocamlrep_derive",
- "rustc-hash",
+ "rustc-hash 1.1.0",
  "serde",
 ]
 
@@ -3575,7 +3601,7 @@ dependencies = [
  "serde_json",
  "strum",
  "thiserror 2.0.17",
- "toml 0.9.8",
+ "toml 0.9.11+spec-1.1.0",
 ]
 
 [[package]]
@@ -3588,7 +3614,7 @@ dependencies = [
  "once_cell",
  "regex",
  "serde",
- "toml 0.9.8",
+ "toml 0.9.11+spec-1.1.0",
 ]
 
 [[package]]
@@ -4434,7 +4460,13 @@ version = "0.0.0"
 
 [[package]]
 name = "rustc-hash"
-version = "2.1.1"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
+
+[[package]]
+name = "rustc-hash"
+version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "357703d41365b4b27c590e3ed91eabb1b663f07c4c084095e60cbed4362dff0d"
 
@@ -5396,9 +5428,9 @@ dependencies = [
 
 [[package]]
 name = "toml"
-version = "0.9.8"
+version = "0.9.11+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0dc8b1fb61449e27716ec0e1bdf0f6b8f3e8f6b05391e8497b8b6d7804ea6d8"
+checksum = "f3afc9a848309fe1aaffaed6e1546a7a14de1f935dc9d89d32afd9a44bab7c46"
 dependencies = [
  "indexmap 2.12.1",
  "serde_core",
@@ -6248,9 +6280,9 @@ dependencies = [
 
 [[package]]
 name = "zmij"
-version = "1.0.12"
+version = "1.0.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2fc5a66a20078bf1251bde995aa2fdcc4b800c70b5d92dd2c62abc5c60f679f8"
+checksum = "dfcd145825aace48cff44a8844de64bf75feec3080e0aa5cdbde72961ae51a65"
 
 [[package]]
 name = "zstd"

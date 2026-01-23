@@ -25,6 +25,7 @@
 FOLLY_PUSH_WARNING
 FOLLY_CLANG_DISABLE_WARNING("-Wnested-anon-types")
 FOLLY_CLANG_DISABLE_WARNING("-Wzero-length-array")
+FOLLY_GCC_DISABLE_WARNING("-Wshadow")
 #include <liburing.h> // @manual
 FOLLY_POP_WARNING
 
@@ -67,6 +68,7 @@ class IoUringProvidedBufferRing {
 
   std::unique_ptr<IOBuf> getIoBuf(
       uint16_t startBufId, size_t totalLength, bool hasMore) noexcept;
+  std::unique_ptr<IOBuf> getIoBuf(const struct io_uring_cqe* cqe) noexcept;
 
   uint32_t count() const noexcept { return bufferCount_; }
   bool available() const noexcept {

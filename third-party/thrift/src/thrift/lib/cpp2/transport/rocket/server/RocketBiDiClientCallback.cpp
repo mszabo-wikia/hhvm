@@ -79,7 +79,7 @@ bool RocketBiDiClientCallback::onSinkCancel() {
   return state_.isAlive() ? true : freeStreamAndReturn(false);
 }
 
-bool RocketBiDiClientCallback::onSinkRequestN(uint64_t n) {
+bool RocketBiDiClientCallback::onSinkRequestN(int32_t n) {
   connection_.sendRequestN(streamId_, n);
 
   return state_.isAlive() ? true : freeStreamAndReturn(false);
@@ -127,7 +127,7 @@ bool RocketBiDiClientCallback::onStreamComplete() {
 // callback
 //
 
-bool RocketBiDiClientCallback::onStreamRequestN(uint64_t n) {
+bool RocketBiDiClientCallback::onStreamRequestN(int32_t n) {
   DCHECK(state_.isStreamOpen());
   return !serverCallback_->onStreamRequestN(n);
 }

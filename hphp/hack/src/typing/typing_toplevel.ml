@@ -41,8 +41,8 @@ let check_if_this_def_is_the_winner ctx name_type (pos, name) : bool =
       let custom_err_config =
         Provider_context.get_tcopt ctx |> TCO.custom_error_config
       in
-      Errors.add_error
-        (Naming_error_utils.to_user_error
+      Diagnostics.add_diagnostic
+        (Naming_error_utils.to_user_diagnostic
            (Naming_error.Error_name_already_bound { name; pos; prev_pos })
            custom_err_config);
       false
@@ -73,7 +73,7 @@ let fun_def ctx fd : Tast.fun_def Tast_with_dynamic.t option =
     let f = fd.fd_fun in
     Profile.measure_elapsed_time_and_report tcopt None fd.fd_name @@ fun () ->
     Counters.count Counters.Category.Typing_toplevel @@ fun () ->
-    Errors.run_with_span f.f_span @@ fun () ->
+    Diagnostics.run_with_span f.f_span @@ fun () ->
     let (_ : bool) =
       check_if_this_def_is_the_winner ctx FileInfo.Fun fd.fd_name
     in
@@ -97,6 +97,7 @@ let fun_def ctx fd : Tast.fun_def Tast_with_dynamic.t option =
     let env = Env.set_current_module env fd.fd_module in
     let env = Env.set_internal env fd.fd_internal in
     let env = Env.set_current_package_membership env fd.fd_package in
+    let env = Env.set_soft_package_from_attr env f.f_user_attributes in
     let env =
       if
         Naming_attributes.mem
@@ -209,7 +210,7 @@ let fun_def ctx fd : Tast.fun_def Tast_with_dynamic.t option =
     in
     Typing_memoize.check_function env f;
     let ((env, tb), had_errors) =
-      Errors.run_and_check_for_errors (fun () ->
+      Diagnostics.run_and_check_for_errors (fun () ->
           Typing.fun_
             ~native:(Typing_native.is_native_fun ~env f)
             ~disable
@@ -315,7 +316,7 @@ let fun_def ctx fd : Tast.fun_def Tast_with_dynamic.t option =
 
 let class_def ctx class_ =
   Counters.count Counters.Category.Typing_toplevel @@ fun () ->
-  Errors.run_with_span class_.c_span @@ fun () ->
+  Diagnostics.run_with_span class_.c_span @@ fun () ->
   if check_if_this_def_is_the_winner ctx FileInfo.Class class_.c_name then
     (* [Typing_class.class_def] is unusual in that it can't work properly
        unless it's the winner and has the same capitalization.
@@ -327,7 +328,7 @@ let class_def ctx class_ =
 let typedef_def ctx typedef =
   let tcopt = Provider_context.get_tcopt ctx in
   Profile.measure_elapsed_time_and_report tcopt None typedef.t_name @@ fun () ->
-  Errors.run_with_span typedef.t_span @@ fun () ->
+  Diagnostics.run_with_span typedef.t_span @@ fun () ->
   let (_ : bool) =
     check_if_this_def_is_the_winner ctx FileInfo.Typedef typedef.t_name
   in
@@ -337,7 +338,7 @@ let gconst_def ctx cst =
   let tcopt = Provider_context.get_tcopt ctx in
   Profile.measure_elapsed_time_and_report tcopt None cst.cst_name @@ fun () ->
   Counters.count Counters.Category.Typing_toplevel @@ fun () ->
-  Errors.run_with_span cst.cst_span @@ fun () ->
+  Diagnostics.run_with_span cst.cst_span @@ fun () ->
   let (_ : bool) =
     check_if_this_def_is_the_winner ctx FileInfo.Const cst.cst_name
   in
@@ -388,8 +389,8 @@ let gconst_def ctx cst =
         let custom_err_config =
           Provider_context.get_tcopt ctx |> TCO.custom_error_config
         in
-        Errors.add_error
-          (Naming_error_utils.to_user_error
+        Diagnostics.add_diagnostic
+          (Naming_error_utils.to_user_diagnostic
              (Naming_error.Missing_typehint (fst cst.cst_name))
              custom_err_config));
       let (env, te, _value_type) = Typing.expr_with_pure_coeffects env value in
@@ -412,7 +413,7 @@ let gconst_def ctx cst =
 
 let module_def ctx md =
   Counters.count Counters.Category.Typing_toplevel @@ fun () ->
-  Errors.run_with_span md.md_span @@ fun () ->
+  Diagnostics.run_with_span md.md_span @@ fun () ->
   let (_ : bool) =
     check_if_this_def_is_the_winner ctx FileInfo.Module md.md_name
   in

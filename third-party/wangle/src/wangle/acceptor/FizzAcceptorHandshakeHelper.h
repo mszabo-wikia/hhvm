@@ -239,7 +239,7 @@ class FizzAcceptorHandshakeHelper
       wangle::TransportInfo& tinfo,
       FizzHandshakeOptions&& options,
       fizz::AsyncFizzBase::TransportOptions transportOptions,
-      ExtendedFallbackStatePolicy extendedFallbackStatePolicy)
+      ExtendedFallbackStatePolicy extendedFallbackStatePolicy = {})
       : context_(std::move(context)),
         sslContextManager_(std::move(sslContextManager)),
         tokenBindingContext_(std::move(options.tokenBindingCtx_)),
@@ -346,6 +346,10 @@ class DefaultToFizzPeekingCallback
     return context_;
   }
 
+  std::shared_ptr<const SSLContextManager> getSSLContextManager() const {
+    return sslContextManager_;
+  }
+
   void setContext(
       std::shared_ptr<const fizz::server::FizzServerContext> context) {
     context_ = std::move(context);
@@ -382,6 +386,10 @@ class DefaultToFizzPeekingCallback
    */
   FizzHandshakeOptions& options() {
     return options_;
+  }
+
+  fizz::AsyncFizzBase::TransportOptions& transportOptions() {
+    return transportOptions_;
   }
 
   wangle::AcceptorHandshakeHelper::UniquePtr getHelper(

@@ -1341,36 +1341,60 @@ end = struct
       create ~code ~claim ~reasons ()
 
     let cross_pkg_access_with_requirepackage
-        (pos : Pos.t)
-        (decl_pos : Pos_or_decl.t)
-        (current_package_opt : string option)
-        (target_package_opt : string option) =
-      let current_package = get_package_str current_package_opt in
-      let target_package =
-        match target_package_opt with
-        | Some s -> s
-        | None ->
-          failwith "target package can't be default for RequirePackage call"
-      in
-      let claim =
-        lazy
-          ( pos,
-            Printf.sprintf
-              "Cannot reference this RequirePackage method defined in package %s from %s"
-              target_package
-              current_package )
+        (pos : Pos.t) (decl_pos : Pos_or_decl.t) (target_package : string) =
+      let claim = lazy (pos, "Cannot reference this __RequirePackage function")
       and reasons =
         lazy
           [
             ( decl_pos,
               Printf.sprintf
-                "This function is marked with __RequirePackage(\"%s\"), so requires the package %s to be loaded. You can check if package %s is loaded by placing this call inside a block like `if(package %s)`"
-                target_package
-                target_package
-                target_package
+                "This function is marked with `__RequirePackage(\"%s\")`"
+                target_package );
+            ( Pos_or_decl.of_raw_pos
+                pos (* TODO(T246617508) better position with per-cont env *),
+              Printf.sprintf
+                "%s is not included in the current environment"
                 target_package );
           ]
       in
+      create ~code:Error_code.InvalidCrossPackage ~claim ~reasons ()
+
+    let cross_pkg_access_with_softrequirepackage
+        (pos : Pos.t)
+        (decl_pos : Pos_or_decl.t)
+        (current_soft_package_opt : (Pos.t * string) option)
+        (target_package : string) =
+      let claim =
+        lazy (pos, "Cannot reference this `__SoftRequirePackage` function")
+      and reasons =
+        lazy
+          (( decl_pos,
+             Printf.sprintf
+               "This function is marked with `__SoftRequirePackage(\"%s\")`, which is a transition feature to help move a function to `__RequirePackage(\"%s\")`. It does not allow calling into %s itself, but it can only be called from functions that have access to %s."
+               target_package
+               target_package
+               target_package
+               target_package )
+          ::
+          (match current_soft_package_opt with
+          | Some (pos, package) ->
+            [
+              ( Pos_or_decl.of_raw_pos pos,
+                Printf.sprintf
+                  "The current function soft-requires package %s, which does not include %s"
+                  package
+                  target_package );
+            ]
+          | None ->
+            [
+              ( Pos_or_decl.of_raw_pos
+                  pos (* TODO(T246617508) report per-continuation packages *),
+                Printf.sprintf
+                  "%s is not included in the current environment"
+                  target_package );
+            ]))
+      in
+
       create ~code:Error_code.InvalidCrossPackage ~claim ~reasons ()
 
     let to_error t ~env:_ =
@@ -1407,13 +1431,16 @@ end = struct
           target_id
           target_symbol_spec
           false (* Soft *)
-      | Cross_pkg_access_with_requirepackage
-          { pos; decl_pos; current_package_opt; target_package_opt } ->
-        cross_pkg_access_with_requirepackage
+      | Cross_pkg_access_with_requirepackage { pos; decl_pos; target_package }
+        ->
+        cross_pkg_access_with_requirepackage pos decl_pos target_package
+      | Cross_pkg_access_with_softrequirepackage
+          { pos; decl_pos; current_soft_package_opt; target_package } ->
+        cross_pkg_access_with_softrequirepackage
           pos
           decl_pos
-          current_package_opt
-          target_package_opt
+          current_soft_package_opt
+          target_package
       | Soft_included_access
           {
             pos;
@@ -2697,6 +2724,50 @@ end = struct
             (Markdown_lite.md_codify id) )
     in
     create ~code:Error_code.ShouldNotBeOverride ~claim ()
+
+  let needs_concrete_in_final_class pos class_name meth_name =
+    let claim =
+      lazy
+        ( pos,
+          Printf.sprintf
+            "The %s attribute is not allowed on %s because %s is a final class. The %s attribute is for safe inheritance so should only be used in non-final classes."
+            (Markdown_lite.md_codify
+               Naming_special_names.UserAttributes.uaNeedsConcrete)
+            (Markdown_lite.md_codify
+               (Render.strip_ns class_name ^ "::" ^ meth_name))
+            (Markdown_lite.md_codify (Render.strip_ns class_name))
+            (Markdown_lite.md_codify
+               Naming_special_names.UserAttributes.uaNeedsConcrete) )
+    in
+    create ~code:Error_code.NeedsConcreteInFinalClass ~claim ()
+
+  let needs_concrete_on_instance_method pos class_name meth_name =
+    let claim =
+      lazy
+        ( pos,
+          Printf.sprintf
+            "The %s attribute is not allowed on %s (a nonstatic method). The %s attribute is only meaningful on static methods."
+            (Markdown_lite.md_codify
+               Naming_special_names.UserAttributes.uaNeedsConcrete)
+            (Markdown_lite.md_codify
+               (Render.strip_ns class_name ^ "::" ^ meth_name))
+            (Markdown_lite.md_codify
+               Naming_special_names.UserAttributes.uaNeedsConcrete) )
+    in
+    create ~code:Error_code.NeedsConcreteOnInstanceMethod ~claim ()
+
+  let needs_concrete_on_constructor pos _class_name =
+    let claim =
+      lazy
+        ( pos,
+          Printf.sprintf
+            "The %s attribute is not allowed on a constructor. The %s attribute is only meaningful on static methods."
+            (Markdown_lite.md_codify
+               Naming_special_names.UserAttributes.uaNeedsConcrete)
+            (Markdown_lite.md_codify
+               Naming_special_names.UserAttributes.uaNeedsConcrete) )
+    in
+    create ~code:Error_code.NeedsConcreteOnConstructor ~claim ()
 
   let typedef_trail_entry pos = (pos, "Typedef definition comes from here")
 
@@ -4829,6 +4900,12 @@ end = struct
       override_per_trait (pos, class_name) meth_name trait_name meth_pos
     | Should_not_be_override { pos; class_id; id } ->
       should_not_be_override pos class_id id
+    | Needs_concrete_in_final_class { pos; class_name; meth_name } ->
+      needs_concrete_in_final_class pos class_name meth_name
+    | Needs_concrete_on_instance_method { pos; class_name; meth_name } ->
+      needs_concrete_on_instance_method pos class_name meth_name
+    | Needs_concrete_on_constructor { pos; class_name } ->
+      needs_concrete_on_constructor pos class_name
     | Trivial_strict_eq { pos; result; left; right; left_trail; right_trail } ->
       trivial_strict_eq pos result left right left_trail right_trail
     | Trivial_strict_not_nullable_compare_null { pos; result; ty_reason_msg } ->
@@ -5246,11 +5323,11 @@ module rec Eval_error : sig
     current_span:Pos.t ->
     t Eval_result.t
 
-  val to_user_error :
+  val to_user_diagnostic :
     Typing_error.Error.t ->
     env:Typing_env_types.env ->
     current_span:Pos.t ->
-    (Pos.t, Pos_or_decl.t) User_error.t Eval_result.t
+    (Pos.t, Pos_or_decl.t) User_diagnostic.t Eval_result.t
 end = struct
   type t = {
     code: Error_code.t;
@@ -5354,7 +5431,7 @@ end = struct
       { code; claim; reasons; explanation; quickfixes }
       ~custom_msgs
       ~function_pos =
-    User_error.make_err
+    User_diagnostic.make_err
       (Error_code.to_enum code)
       (Lazy.force claim)
       (Lazy.force reasons)
@@ -5384,7 +5461,7 @@ end = struct
           ^ acc)
       ~init:""
 
-  let to_user_error t ~env ~current_span =
+  let to_user_diagnostic t ~env ~current_span =
     let result = eval t ~env ~current_span in
     let custom_err_config =
       TypecheckerOptions.custom_error_config (Typing_env.get_tcopt env)
@@ -6192,7 +6269,9 @@ end = struct
       Lazy.(
         reason_sub >>= fun reason_sub ->
         reason_super >>= fun reason_super ->
-        return (((pos, "Require package mismatch") :: reason_sub) @ reason_super))
+        return
+          (((pos, "Mismatch in `__RequirePackage` attribute") :: reason_sub)
+          @ reason_super))
     in
     create ~code:Error_code.InvalidCrossPackage ~reasons ()
 
@@ -6863,7 +6942,7 @@ and Eval_reasons_callback : sig
     Typing_error.Reasons_callback.t ->
     env:Typing_env_types.env ->
     current_span:Pos.t ->
-    (Pos.t, Pos_or_decl.t) User_error.t Eval_result.t
+    (Pos.t, Pos_or_decl.t) User_diagnostic.t Eval_result.t
 end = struct
   module Error_state = struct
     type t = {
@@ -7077,7 +7156,7 @@ end = struct
 
   let apply eval_snd t ~env ~current_span =
     let f Eval_error.{ code; claim; reasons; explanation; quickfixes } =
-      User_error.make_err
+      User_diagnostic.make_err
         (Error_code.to_enum code)
         ~is_fixmed:false
         ~quickfixes
@@ -7088,32 +7167,32 @@ end = struct
     Eval_result.map ~f @@ apply_help eval_snd t ~env ~current_span
 end
 
-let is_suppressed error = Errors.is_suppressed error
+let is_suppressed error = Diagnostics.is_suppressed error
 
 let add_typing_error err ~env =
-  Eval_result.iter ~f:Errors.add_error
+  Eval_result.iter ~f:Diagnostics.add_diagnostic
   @@ Eval_result.suppress_intersection ~is_suppressed
-  @@ Eval_error.to_user_error
+  @@ Eval_error.to_user_diagnostic
        err
        ~env
-       ~current_span:(Errors.get_current_span ())
+       ~current_span:(Diagnostics.get_current_span ())
 
 let apply_error_from_reasons_callback eval_snd err ~env =
-  Eval_result.iter ~f:Errors.add_error
+  Eval_result.iter ~f:Diagnostics.add_diagnostic
   @@ Eval_result.suppress_intersection ~is_suppressed
   @@ Eval_reasons_callback.apply
        eval_snd
        err
        ~env
-       ~current_span:(Errors.get_current_span ())
+       ~current_span:(Diagnostics.get_current_span ())
 
 let claim_as_reason : Pos.t Message.t -> Pos_or_decl.t Message.t =
  (fun (p, m) -> (Pos_or_decl.of_raw_pos p, m))
 
-(** TODO: Remove use of `User_error.t` representation for nested error &
+(** TODO: Remove use of `User_diagnostic.t` representation for nested error &
     callback application *)
 let ambiguous_inheritance pos class_ origin error on_error ~env =
-  let User_error.{ code; claim; reasons; explanation; _ } = error in
+  let User_diagnostic.{ code; claim; reasons; explanation; _ } = error in
   let origin = Render.strip_ns origin in
   let class_ = Render.strip_ns class_ in
   let message =

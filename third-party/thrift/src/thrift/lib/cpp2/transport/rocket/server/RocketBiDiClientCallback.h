@@ -134,7 +134,7 @@ class RocketBiDiClientCallback final : public BiDiClientCallback {
   RocketBiDiClientCallback(
       StreamId streamId,
       IRocketServerConnection& connection,
-      uint32_t initialTokens)
+      int32_t initialTokens)
       : streamId_(streamId),
         connection_(connection),
         initialTokens_(initialTokens) {}
@@ -154,7 +154,7 @@ class RocketBiDiClientCallback final : public BiDiClientCallback {
       BiDiServerCallback* serverCallback) override;
   void onFirstResponseError(folly::exception_wrapper ew) override;
   bool onSinkCancel() override;
-  bool onSinkRequestN(uint64_t n) override;
+  bool onSinkRequestN(int32_t n) override;
   bool onStreamNext(StreamPayload&& payload) override;
   bool onStreamError(folly::exception_wrapper ew) override;
   bool onStreamComplete() override;
@@ -169,7 +169,7 @@ class RocketBiDiClientCallback final : public BiDiClientCallback {
   //
 
   // Delegates to BiDiServerCallback::onStreamRequestN
-  bool onStreamRequestN(uint64_t n);
+  bool onStreamRequestN(int32_t n);
 
   // Delegates to BiDiServerCallback::onStreamCancel
   bool onStreamCancel();
@@ -211,7 +211,7 @@ class RocketBiDiClientCallback final : public BiDiClientCallback {
 
   State state_;
 
-  uint64_t initialTokens_{0};
+  int32_t initialTokens_{0};
 
   std::optional<CompressionConfig> compressionConfig_;
 

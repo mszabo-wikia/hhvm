@@ -21,8 +21,6 @@
 
 #include <folly/String.h>
 
-#ifdef THRIFT_SCHEMA_AVAILABLE
-
 namespace apache::thrift::syntax_graph::detail {
 namespace type = apache::thrift::type;
 namespace protocol = apache::thrift::protocol;
@@ -873,6 +871,11 @@ FunctionNode SchemaIndex::createFunction(
     }
   }();
 
+  std::optional<std::string_view> docBlock;
+  if (!op::isEmpty<>(*function.attrs()->docs())) {
+    docBlock = *function.attrs()->docs()->contents();
+  }
+
   std::vector<FunctionNode::Param> params;
   for (const type::Field& param : *function.paramlist()->fields()) {
     params.emplace_back(
@@ -892,6 +895,7 @@ FunctionNode SchemaIndex::createFunction(
           std::move(interaction),
           std::move(sinkOrStream)),
       *function.name(),
+      docBlock,
       std::move(params),
       collectExceptions(*function.exceptions()),
       *function.qualifier(),
@@ -1162,4 +1166,3 @@ const DefinitionNode* IncrementalResolver::getDefinitionNodeByUri(
 }
 
 } // namespace apache::thrift::syntax_graph::detail
-#endif

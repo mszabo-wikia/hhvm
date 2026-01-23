@@ -44,8 +44,8 @@ include_directories(${LIBEVENT_INCLUDE_DIR})
 set(CMAKE_REQUIRED_LIBRARIES "${LIBEVENT_LIB}")
 CHECK_FUNCTION_EXISTS("evhttp_bind_socket_with_fd" HAVE_CUSTOM_LIBEVENT)
 if(HAVE_CUSTOM_LIBEVENT)
-        message("Using custom LIBEVENT")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAVE_CUSTOM_LIBEVENT")
+  message("Using custom LIBEVENT")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAVE_CUSTOM_LIBEVENT")
 endif()
 set(CMAKE_REQUIRED_LIBRARIES)
 
@@ -82,6 +82,9 @@ find_package(FastLZ)
 if (FASTLZ_INCLUDE_DIR)
   include_directories(${FASTLZ_INCLUDE_DIR})
 endif()
+
+# ldap
+find_package(Ldap)
 
 # ICU
 find_package(ICU REQUIRED)
@@ -235,6 +238,10 @@ if (NOT WINDOWS)
     add_definitions("-DLIBDWARF_USE_INIT_C")
   endif()
 
+  if (LIBDWARF_USE_NEW_PRODUCER_API)
+    add_definitions("-DLIBDWARF_USE_NEW_PRODUCER_API")
+  endif()
+
   find_package(LibElf REQUIRED)
   include_directories(${LIBELF_INCLUDE_DIRS})
   if (ELF_GETSHDRSTRNDX)
@@ -272,6 +279,9 @@ if (APPLE)
 endif()
 
 if (LINUX)
+  find_package(systemd REQUIRED)
+  find_package(Bpf REQUIRED)
+  find_package(LibUnwind REQUIRED)
   find_package(Bpf REQUIRED)
 endif()
 
@@ -282,6 +292,9 @@ find_package(Libpam)
 if (PAM_INCLUDE_PATH)
   include_directories(${PAM_INCLUDE_PATH})
 endif()
+
+# Needed by fbthrift.
+find_package(Xxhash REQUIRED)
 
 include_directories(${HPHP_HOME}/hphp)
 
@@ -337,7 +350,7 @@ macro(hphp_link target)
   target_link_libraries(${target} ${VISIBILITY} glog)
 
   if (LINUX)
-    target_link_libraries(${target} ${VISIBILITY} ${BPF_LIBRARIES})
+    target_link_libraries(${target} ${VISIBILITY} ${LIBUNWIND_LIBRARIES} ${BPF_LIBRARIES} ${SYSTEMD_LIBRARIES})
   endif()
 
   if (LIBINOTIFY_LIBRARY)
@@ -378,6 +391,8 @@ macro(hphp_link target)
 
   target_link_libraries(${target} ${VISIBILITY} ${LBER_LIBRARIES})
 
+  target_link_libraries(${target} ${VISIBILITY} ${Xxhash_LIBRARY})
+
   if (CRYPT_LIB)
     target_link_libraries(${target} ${VISIBILITY} ${CRYPT_LIB})
   endif()
@@ -416,11 +431,7 @@ macro(hphp_link target)
   target_link_libraries(${target} ${VISIBILITY} fizz)
   target_link_libraries(${target} ${VISIBILITY} brotli)
   target_link_libraries(${target} ${VISIBILITY} hhbc_ast_header)
-  target_link_libraries(${target} ${VISIBILITY} compiler_ffi)
-  target_link_libraries(${target} ${VISIBILITY} package_ffi)
-  target_link_libraries(${target} ${VISIBILITY} parser_ffi)
-  target_link_libraries(${target} ${VISIBILITY} hhvm_types_ffi)
-  target_link_libraries(${target} ${VISIBILITY} hhvm_hhbc_defs_ffi)
+  target_link_libraries(${target} ${VISIBILITY} hack_rust_ffi_bridge)
 
   target_link_libraries(${target} ${VISIBILITY} tbb)
 
@@ -444,9 +455,9 @@ macro(hphp_link target)
 
   if (ENABLE_XED)
     if (LibXed_FOUND)
-        target_link_libraries(${target} ${VISIBILITY} ${LibXed_LIBRARY})
+      target_link_libraries(${target} ${VISIBILITY} ${LibXed_LIBRARY})
     else()
-        target_link_libraries(${target} ${VISIBILITY} xed)
+      target_link_libraries(${target} ${VISIBILITY} xed)
     endif()
   endif()
 

@@ -266,8 +266,6 @@ and hint_ p env = function
             ~support_dynamic_type:false
             ~is_memoized:false
             ~variadic;
-        (* TODO *)
-        ft_require_package = None;
         ft_instantiated = List.is_empty ft_tparams;
       }
   | Happly (id, argl) ->
@@ -372,5 +370,5 @@ and hint_ p env = function
   | Hsoft (p, h_) -> hint_ p env h_
   | Hfun_context _
   | Hvar _ ->
-    Errors.internal_error p "Unexpected context hint";
+    Diagnostics.internal_error p "Unexpected context hint";
     Tunion []

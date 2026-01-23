@@ -10,7 +10,7 @@ open Core
 module Codes = Error_codes.Warning
 module SN = Naming_special_names
 
-let severity = User_error.Warning
+let severity = User_diagnostic.Warning
 
 module type Warning = sig
   type t
@@ -828,6 +828,23 @@ module Redundant_nullsafe_operation = struct
   let quickfixes _ = []
 end
 
+module Unbound_name_warning = struct
+  type t = Typing_warning.Unbound_name_warning.t
+
+  let code = Codes.UnboundNameWarning
+
+  let codes = [code]
+
+  let code _ = code
+
+  let claim { Typing_warning.Unbound_name_warning.name; kind_str } =
+    "Unbound name: " ^ Markdown_lite.md_codify (Render.strip_ns name) ^ kind_str
+
+  let reasons _ = []
+
+  let quickfixes _ = []
+end
+
 let module_of (type a x) (kind : (x, a) Typing_warning.kind) :
     (module Warning with type t = x) =
   match kind with
@@ -856,6 +873,7 @@ let module_of (type a x) (kind : (x, a) Typing_warning.kind) :
     (module Expect_bool_for_condition)
   | Typing_warning.Redundant_nullsafe_operation ->
     (module Redundant_nullsafe_operation)
+  | Typing_warning.Unbound_name_warning -> (module Unbound_name_warning)
 
 let module_of_migrated
     (type x) (kind : (x, Typing_warning.migrated) Typing_warning.kind) :
@@ -875,13 +893,13 @@ let code_is_enabled tcopt code =
   | GlobalOptions.All_except disabled_codes ->
     not (List.mem disabled_codes (Codes.to_enum code) ~equal:Int.equal)
 
-let add tcopt (type a x) ((pos, kind, warning) : (x, a) Typing_warning.t) : unit
-    =
+let add_ tcopt (type a x) ((pos, kind, warning) : (x, a) Typing_warning.t) :
+    unit =
   let (module M) = module_of kind in
   if code_is_enabled tcopt (M.code warning) then
-    Errors.add_error
+    Diagnostics.add_diagnostic
       {
-        User_error.severity;
+        User_diagnostic.severity;
         code = Codes.to_enum (M.code warning);
         claim = (pos, M.claim warning);
         reasons = M.reasons warning;
@@ -898,19 +916,20 @@ let add_for_migration
     ~(as_lint : Tast.check_status option option)
     (warning : (x, Typing_warning.migrated) Typing_warning.t) : unit =
   match as_lint with
-  | None -> add tcopt warning
+  | None -> add_ tcopt warning
   | Some check_status ->
     let (pos, kind, warning) = warning in
     let (module M) = module_of_migrated kind in
     Lints_core.add
-      ~autofix:(M.lint_quickfix warning |> Option.map ~f:Lints_errors.quickfix)
+      ~autofix:
+        (M.lint_quickfix warning |> Option.map ~f:Lints_diagnostics.quickfix)
       (M.lint_code warning)
       ~check_status
       (M.lint_severity warning)
       pos
       (M.claim warning)
 
-let add env warning = add (Typing_env.get_tcopt env) warning
+let add env warning = add_ (Typing_env.get_tcopt env) warning
 
 let codes (type a x) (kind : (x, a) Typing_warning.kind) :
     Error_codes.Warning.t list =

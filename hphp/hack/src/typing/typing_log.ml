@@ -298,11 +298,15 @@ let type_as_value env ty = Atom (Pr.debug env ty)
 let decl_type_as_value env ty = Atom (Pr.debug_decl env ty)
 
 let return_info_as_value env return_info =
-  let Typing_env_return_info.{ return_type; return_disposable } = return_info in
+  let Typing_env_return_info.
+        { return_type; return_disposable; return_ignore_readonly } =
+    return_info
+  in
   make_map
     [
       ("return_type", type_as_value env return_type);
       ("return_disposable", Bool return_disposable);
+      ("return_ignore_readonly", Bool return_ignore_readonly);
     ]
 
 let local_id_map_as_value f m =
@@ -525,6 +529,7 @@ let genv_as_value env genv =
     file = _;
     current_module;
     current_package;
+    soft_package_requirement;
     this_internal;
     this_support_dynamic_type;
     no_auto_likes;
@@ -556,6 +561,13 @@ let genv_as_value env genv =
       | Some Aast_defs.(PackageConfigAssignment pkg | PackageOverride (_, pkg))
         ->
         [("current_package", string_as_value pkg)]
+      | None -> [])
+    @ (match soft_package_requirement with
+      | Some soft_package_requirement ->
+        [
+          ( "soft_package_requirement",
+            string_as_value @@ Ast_defs.show_id soft_package_requirement );
+        ]
       | None -> [])
     @ (match parent with
       | Some (parent_id, parent_ty) ->

@@ -318,8 +318,13 @@ module Primary : sig
       | Cross_pkg_access_with_requirepackage of {
           pos: Pos.t;
           decl_pos: Pos_or_decl.t;
-          current_package_opt: string option;
-          target_package_opt: string option;
+          target_package: string;
+        }
+      | Cross_pkg_access_with_softrequirepackage of {
+          pos: Pos.t;
+          decl_pos: Pos_or_decl.t;
+          current_soft_package_opt: (Pos.t * string) option;
+          target_package: string;
         }
       | Soft_included_access of {
           pos: Pos.t;
@@ -736,6 +741,20 @@ module Primary : sig
         pos: Pos.t;
         class_id: string;
         id: string;
+      }
+    | Needs_concrete_in_final_class of {
+        pos: Pos.t;
+        class_name: string;
+        meth_name: string;
+      }
+    | Needs_concrete_on_instance_method of {
+        pos: Pos.t;
+        class_name: string;
+        meth_name: string;
+      }
+    | Needs_concrete_on_constructor of {
+        pos: Pos.t;
+        class_name: string;
       }
     | Trivial_strict_eq of {
         pos: Pos.t;
@@ -1876,11 +1895,11 @@ and Reasons_callback : sig
 
   (** Replace the current list of reasons with those supplied. This is typically
        used in combination with `retain_reasons` to fix the `reasons` of the
-      `User_error.t` that is obtained when the callback is applied
+      `User_diagnostic.t` that is obtained when the callback is applied
   *)
   val with_reasons : t -> reasons:Pos_or_decl.t Message.t list Lazy.t -> t
 
-  (** Add a `quickfix` to the `User_error.t` generated when the callback is
+  (** Add a `quickfix` to the `User_diagnostic.t` generated when the callback is
       applied
   *)
   val add_quickfixes : t -> Pos.t Quickfix.t list -> t
@@ -1897,21 +1916,21 @@ and Reasons_callback : sig
   (** When applied, prepend the supplied reasons to the current list of reasons *)
   val prepend_incoming_reasons : t -> t
 
-  (** Ignore the incoming error code argument when evaluating to a `User_error.t`.
+  (** Ignore the incoming error code argument when evaluating to a `User_diagnostic.t`.
 
       This is equivalent to the following function, given some callback `on_error`:
       `(fun ?code:_ ?quickfixes reasons -> on_error ?quickfixes reasons)`
   *)
   val retain_code : t -> t
 
-  (** Ignore the incoming reasons argument when evaluating to a `User_error.t`.
+  (** Ignore the incoming reasons argument when evaluating to a `User_diagnostic.t`.
 
       This is equivalent to the following function, given some callback `on_error`:
       `(fun ?code ?quickfixes _ -> on_error ?code ?quickfixes)`
   *)
   val retain_reasons : t -> t
 
-  (** Ignore the incoming quickfixes component when evaluating to a `User_error.t`.
+  (** Ignore the incoming quickfixes component when evaluating to a `User_diagnostic.t`.
 
       This is equivalent to the following function, given some callback `on_error`:
       `(fun ?code ?quickfixes:_ reasons -> on_error ?code reasons)`
@@ -2091,7 +2110,7 @@ val multiple_opt : t list -> t option
     `multiple [t1;t2]`*)
 val both : t -> t -> t
 
-(** Modify the code that will be reported when evaluated to a `User_error.t`  *)
+(** Modify the code that will be reported when evaluated to a `User_diagnostic.t`  *)
 val with_code : t -> code:Error_code.t -> t
 
 val count : t -> int

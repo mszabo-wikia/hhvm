@@ -32,7 +32,7 @@ more usable:
   - `result` uses `std::exception_ptr` (with some folly-specific enhancements)
     to efficiently transport all exception types, which avoids the user-facing
     complexity of distinguishing `outcome::result` (`error_code` only) and
-    `outcome::outcome` (code OR exception).
+    `outcome::outcome` (code OR exception) -- more in `design_notes.md`.
 
   - `result` needs no macros, and has a much easier-to-learn API.
 
@@ -72,7 +72,9 @@ than thrown exceptions, and more flexible than error codes:
     and does not implicitly convert to `T`.  You **have** to unpack it.
   - The standard pattern for accessing the value is `co_await
     or_unwind(resultFn())`, which also **visibly and efficiently** propagates
-    unhandled exceptions (and cancellation) to the caller.
+    unhandled exceptions (and cancellation) to the caller.  For error
+    enrichment with source location tracking, use `co_await or_unwind_rich(
+    resultFn(), "context {}", arg)` instead.
   - Handling specific exceptions via `if (auto ex = get_exception<Ex>(res))` is
     as clear as `try-catch`, and lacks the many gotchas of the
     exception-unwinding context.
@@ -185,7 +187,8 @@ In bullets, `result<T>`:
 
   - Is move-only, unlike `Expected` and `Try`. The benefit is that the `result`
     plumbing tax stays low, avoiding both user data copies, and
-    `std::exception_ptr` atomic ops.
+    `std::exception_ptr` atomic ops. If you need to add copyability, check out
+    `design_notes.md` to do it right.
       * For usability, copy conversion from cheap types (like `int`) is allowed.
       * Explicit `res.copy()` is rarely needed, since `return` and `co_return`
         are "implicit move contexts".
@@ -387,10 +390,11 @@ logResult(result<V&>{std::ref(v)});
 ```
 
 If `const` didn't propagate inside `result<T&>`, then `logResult` could
-accidentally mutate `v`, even though the signature looks like it shouldn't.
+accidentally mutate `v`, even though the signature looks like it shouldn't --
+`design_notes.md` discusses this in-depth.
 
 In rare scenarios, `const`-propagation may not be what you want.  Your
-work-around is to store `result<V*>` or `result<std::reference_wrapper<V>>`. 
+workaround is to store `result<V*>` or `result<std::reference_wrapper<V>>`.
 One example is a read-locked map that references thread-safe values:
 
 ```cpp
@@ -486,3 +490,36 @@ result<int> plantSeeds(int n) {
   });
 }
 ```
+
+## Known issue: `or_unwind(rvalue)` and dangling references
+
+When storing the result of `co_await or_unwind(rvalue)` in a reference variable, there
+is a **lifetime footgun** that current compilers do not catch:
+
+```cpp
+auto&& ref = co_await or_unwind(resFn());
+use(ref); // BAD: use-after-free
+```
+
+Use one of these safe alternatives:
+
+```cpp
+// Store the result before it gets destroyed at the `;`.
+auto val = co_await or_unwind(resFn()); //
+
+// Store the result in a *movable* `or_unwind_owning`.
+auto val = co_await or_unwind_owning(resFn());
+
+// Store the result first, keeping the ref alive
+auto res = resFn();
+auto&& ref = co_await or_unwind(std::move(res));
+```
+
+The issue only affects `or_unwind(rvalue)` with reference binding. Using `auto`
+(without `&&`) is always safe since it stores the value.
+
+**Aside**: Why don't the `[[clang::lifetimebound]]` annotations in `or_unwind`
+catch this? It turns out there's an [LLVM issue #177023](
+https://github.com/llvm/llvm-project/issues/177023) with propagating
+`lifetimebound` analysis through `operator co_await`. Once it is fixed, this
+footgun will emit `-Wdangling`, failing sensibly-configured builds.

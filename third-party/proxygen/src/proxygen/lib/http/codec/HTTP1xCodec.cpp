@@ -37,23 +37,22 @@ const char CRLF[] = "\r\n";
  * @param dst    Location to which the value will be written.
  * @return Number of bytes written.
  */
-unsigned u64toa(uint64_t value, void* dst) {
+unsigned u64toa(uint64_t value, char* dst) {
   // Write backwards.
-  char* next = (char*)dst;
-  char* start = next;
+  char* start = dst;
   do {
-    *next++ = '0' + (value % 10);
+    *dst++ = '0' + (value % 10);
     value /= 10;
   } while (value != 0);
-  unsigned length = next - start;
+  unsigned length = dst - start;
 
   // Reverse in-place.
-  next--;
-  while (next > start) {
-    char swap = *next;
-    *next = *start;
+  dst--;
+  while (dst > start) {
+    char swap = *dst;
+    *dst = *start;
     *start = swap;
-    next--;
+    dst--;
     start++;
   }
   return length;
@@ -73,6 +72,34 @@ void appendUint(IOBufQueue& queue, size_t& len, uint64_t value) {
 void appendString(IOBufQueue& queue, size_t& len, StringPiece str) {
   queue.append(str.data(), str.size());
   len += str.size();
+}
+
+using namespace proxygen;
+// discard messages with multiple content-length headers, if they differ
+// (t12767790)
+bool validateContentLen(const HTTPHeaders& hdrs) noexcept {
+  const std::string* contentLen{nullptr};
+  bool ok = !hdrs.forEachValueOfHeader(
+      HTTP_HEADER_CONTENT_LENGTH, [&](const std::string& value) -> bool {
+        if (!contentLen) {
+          contentLen = &value;
+          return false; // continue
+        }
+        return *contentLen != value; // stop if different
+      });
+  LOG_IF(ERROR, !ok) << "Invalid message, multiple Content-Length headers";
+  return ok;
+}
+
+// only supports transfer-encoding of "chunked" (identical to http_parser.cpp)
+bool validateTransferEncoding(const HTTPHeaders& hdrs) noexcept {
+  bool ok = !hdrs.forEachValueOfHeader(
+      HTTP_HEADER_TRANSFER_ENCODING, [&](folly::StringPiece value) -> bool {
+        bool err = !value.equals(kChunked, folly::AsciiCaseInsensitive{});
+        LOG_IF(ERROR, err) << "invalid transfer-encoding val=" << value;
+        return err; // stop on err
+      });
+  return ok;
 }
 
 } // anonymous namespace
@@ -900,16 +927,14 @@ bool HTTP1xCodec::pushHeaderNameAndValue(HTTPHeaders& hdrs) {
       return false;
     }
   }
-  if (LIKELY(currentHeaderName_.empty())) {
-    hdrs.addFromCodec(currentHeaderNameStringPiece_.begin(),
-                      currentHeaderNameStringPiece_.size(),
-                      std::move(currentHeaderValue_));
-  } else {
-    hdrs.add(currentHeaderName_, std::move(currentHeaderValue_));
-    currentHeaderName_.clear();
-  }
+  auto headerName = currentHeaderName_.empty()
+                        ? currentHeaderNameStringPiece_
+                        : folly::StringPiece(currentHeaderName_);
+  hdrs.add(headerName, std::move(currentHeaderValue_));
+  currentHeaderName_.clear();
   currentHeaderNameStringPiece_.clear();
   currentHeaderValue_.clear();
+
   return true;
 }
 
@@ -982,34 +1007,12 @@ int HTTP1xCodec::onHeadersComplete(size_t len) {
     }
   }
 
-  // discard messages with folded or multiple valued Transfer-Encoding headers
-  // ex : "chunked , zorg\r\n" or "\r\n chunked \r\n" (t12767790)
   HTTPHeaders& hdrs = msg_->getHeaders();
-  const std::string& headerVal =
-      hdrs.getSingleOrEmpty(HTTP_HEADER_TRANSFER_ENCODING);
-  if (!headerVal.empty() && !caseInsensitiveEqual(headerVal, kChunked)) {
-    LOG(ERROR) << "Invalid Transfer-Encoding header. Value =" << headerVal;
+  if (!validateContentLen(hdrs)) {
     return -1;
   }
-
-  // discard messages with multiple content-length headers (t12767790)
-  if (hdrs.getNumberOfValues(HTTP_HEADER_CONTENT_LENGTH) > 1) {
-    // Only reject the message if the Content-Length headers have different
-    // values
-    folly::Optional<folly::StringPiece> contentLen;
-    bool error = hdrs.forEachValueOfHeader(
-        HTTP_HEADER_CONTENT_LENGTH, [&](folly::StringPiece value) -> bool {
-          if (!contentLen.has_value()) {
-            contentLen = value;
-            return false;
-          }
-          return (contentLen.value() != value);
-        });
-
-    if (error) {
-      LOG(ERROR) << "Invalid message, multiple Content-Length headers";
-      return -1;
-    }
+  if (!validateTransferEncoding(hdrs)) {
+    return -1;
   }
 
   // Update the HTTPMessage with the values parsed from the header

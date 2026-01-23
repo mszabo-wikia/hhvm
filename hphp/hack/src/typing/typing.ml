@@ -237,7 +237,7 @@ module Env_help : sig
     pessimisable_builtin:bool ->
     env ->
     ExpectedTy.t option ->
-    env * (pos * Reason.ureason * bool * locl_ty * locl_phase ty_) option
+    env * (pos * Reason.ureason * bool * locl_ty * locl_phase ty_ * bool) option
 end = struct
   let unbox ~strip_supportdyn ~pessimisable_builtin env ty =
     let rec aux ~under_supportdyn env ty =
@@ -292,7 +292,7 @@ end = struct
       ~strip_supportdyn
       ~pessimisable_builtin
       env
-      ExpectedTy.{ pos = p; reason = ur; ty; _ } =
+      ExpectedTy.{ pos = p; reason = ur; ty; ignore_readonly; _ } =
     let (env, res) = unbox ~strip_supportdyn ~pessimisable_builtin env ty in
     match res with
     | None -> (env, None)
@@ -300,7 +300,7 @@ end = struct
       if supportdyn && not strip_supportdyn then
         (env, None)
       else
-        (env, Some (p, ur, supportdyn, uty, get_node uty))
+        (env, Some (p, ur, supportdyn, uty, get_node uty, ignore_readonly))
 
   let expand_expected_opt
       ~strip_supportdyn ~pessimisable_builtin env expected_ty_opt =
@@ -1314,14 +1314,25 @@ end = struct
   let validate
       ?(is_function_pointer = false)
       (use_pos, name)
-      require_package
-      { fe_pos = def_pos; fe_deprecated; fe_module; fe_internal; fe_package; _ }
+      {
+        fe_pos = def_pos;
+        fe_deprecated;
+        fe_module;
+        fe_internal;
+        fe_package;
+        fe_package_requirement;
+        _;
+      }
       env =
     let other_errs =
       List.filter_opt
         [
           TVis.check_deprecated ~use_pos ~def_pos env fe_deprecated;
-          TVis.check_cross_package ~use_pos ~def_pos env require_package;
+          TVis.check_cross_package
+            ~use_pos
+            ~def_pos
+            env
+            (Some fe_package_requirement);
         ]
     and access_errs =
       TVis.check_top_level_access
@@ -1472,14 +1483,7 @@ end = struct
       fun_id
       decl_entry
       env =
-    let () =
-      validate
-        ~is_function_pointer
-        fun_id
-        fun_ty.ft_require_package
-        decl_entry
-        env
-    in
+    let () = validate ~is_function_pointer fun_id decl_entry env in
     let { fe_pos; fe_support_dynamic_type; _ } = decl_entry in
     let fun_ty =
       Typing_enforceability.compute_enforced_and_pessimize_fun_type
@@ -1936,7 +1940,7 @@ let check_lambda_arity env lambda_pos def_pos lambda_ft expected_ft =
                 hint_convert_to_optional;
               }));
     not (too_few || too_many)
-    (* Errors.typing_too_many_args expected_min lambda_min lambda_pos def_pos *)
+    (* Diagnostics.typing_too_many_args expected_min lambda_min lambda_pos def_pos *)
   | (_, _) -> true
 
 let param_modes
@@ -2790,7 +2794,6 @@ end = struct
                 { capability = CapDefaults (Pos_or_decl.of_raw_pos p) };
               ft_ret;
               ft_flags;
-              ft_require_package = None;
               ft_instantiated = true;
             } ) )
 
@@ -2891,7 +2894,7 @@ end = struct
     try expr_ ~expected ~ctxt env e with
     | Inf.InconsistentTypeVarState _ as exn ->
       (* we don't want to catch unwanted exceptions here, eg Timeouts *)
-      Errors.exception_occurred p (Exception.wrap exn);
+      Diagnostics.exception_occurred p (Exception.wrap exn);
       expr_error env p e
 
   (* Some (legacy) special functions are allowed in initializers,
@@ -3259,7 +3262,7 @@ end = struct
         and telemetry =
           Telemetry.(create () |> string_ ~key:"class name" ~value:name)
         in
-        Errors.invariant_violation p telemetry desc ~report_to_user:false;
+        Diagnostics.invariant_violation p telemetry desc ~report_to_user:false;
         (* Continue typechecking without performing the check on a best effort
            basis. *)
         env
@@ -3352,7 +3355,7 @@ end = struct
               env
               expected
           with
-          | (env, Some (pos, ur, _, ety, _)) -> begin
+          | (env, Some (pos, ur, _, ety, _, _)) -> begin
             match get_expected_kind ety with
             | Some (env, vty) -> (env, Some (ExpectedTy.make pos ur vty), None)
             | None -> (env, None, None)
@@ -3404,8 +3407,8 @@ end = struct
               env
               expected
           with
-          | (env, Some (pos, reason, _, ety, _)) when not (List.is_empty l) ->
-          begin
+          | (env, Some (pos, reason, _, ety, _, _)) when not (List.is_empty l)
+            -> begin
             match get_expected_kind ety with
             | Some (env, kty, vty) ->
               let k_expected = ExpectedTy.make pos reason kty in
@@ -3535,7 +3538,7 @@ end = struct
       in
       begin
         match expected with
-        | Some (_pos, _ur, _, _, Tnewtype (fs, [ty; _], _))
+        | Some (_pos, _ur, _, _, Tnewtype (fs, [ty; _], _), _)
           when SN.Classes.is_typed_format_string fs ->
           let (env, fpl) = Typing_exts.parse_printf_string env s p ty in
           let tuple_ty =
@@ -3558,7 +3561,7 @@ end = struct
       make_result env p (Aast.String2 tel) (MakeType.string (Reason.witness p))
     | PrefixedString (n, e) ->
       if String.( <> ) n "re" then (
-        Errors.experimental_feature
+        Diagnostics.experimental_feature
           p
           "String prefixes other than `re` are not yet supported.";
         expr_error env p outer
@@ -3828,7 +3831,7 @@ end = struct
       let (env, tel, tyl) =
         match expected with
         (* TODO: optional and variadic fields T201398626 T201398652 *)
-        | Some (pos, ur, _, _, Ttuple { t_required = expected_tyl; _ }) ->
+        | Some (pos, ur, _, _, Ttuple { t_required = expected_tyl; _ }, _) ->
           let expected_tys =
             List.map expected_tyl ~f:(ExpectedTy.make pos ur)
           in
@@ -3863,7 +3866,7 @@ end = struct
               expected
           in
           (match expected with
-          | Some (pos, ur, _, _, Ttuple { t_required = expected_tyl; _ }) ->
+          | Some (pos, ur, _, _, Ttuple { t_required = expected_tyl; _ }, _) ->
             let expected_tys =
               List.map expected_tyl ~f:(ExpectedTy.make pos ur)
             in
@@ -3901,7 +3904,7 @@ end = struct
                env
                expected
            with
-          | (env, Some (pos, reason, _, _ty, Tclass ((_, k), _, [ty1; ty2])))
+          | (env, Some (pos, reason, _, _ty, Tclass ((_, k), _, [ty1; ty2]), _))
             when String.equal k SN.Collections.cPair ->
             let ty1_expected = ExpectedTy.make pos reason ty1 in
             let ty2_expected = ExpectedTy.make pos reason ty2 in
@@ -4530,7 +4533,7 @@ end = struct
         | Tdynamic when Tast.is_under_dynamic_assumptions env.checked ->
           expected_return
         | _ ->
-          Errors.internal_error p "Return type is not a generator";
+          Diagnostics.internal_error p "Return type is not a generator";
           MakeType.union (Reason.yield_send p) []
       in
       let is_async =
@@ -4967,7 +4970,8 @@ end = struct
             env
             expected
         with
-        | (env, Some (pos, ur, _, _, Tshape { s_fields = expected_fdm; _ })) ->
+        | (env, Some (pos, ur, _, _, Tshape { s_fields = expected_fdm; _ }, _))
+          ->
           List.map_env
             env
             ~f:(fun env ((k, _) as ke) ->
@@ -5718,6 +5722,35 @@ end = struct
     let make_call env func targs args unpacked_arg ty =
       make_result env p (Aast.Call { func; targs; args; unpacked_arg }) ty
     in
+    let matches_auto_complete_suffix x =
+      String.is_suffix x ~suffix:AutocompleteTypes.autocomplete_token
+    in
+    (* When autocompleting a call such as
+     *   foo(#AUTO332
+     * to a function whose signature is similar to
+     *   function foo<Targs as (mixed...)>(HH\EnumClass\Label<C, Targs> $label, ...Targs $args): void
+     * we filter the possible values for $label according to the type, which includes a Targs generic.
+     * Unfortunately, in the absence of any arguments, we end up inferring () for Targs, and so we lose
+     * enum constants that make sense if there are other arguments.
+     *
+     * A somewhat hacky fix is to pretend that there may be more arguments by adding a bogus
+     * unpacked element. This stops type inference from eagerly filling in
+     * an empty tuple for a splat parameter.
+     *)
+    let unpacked_element =
+      if
+        Option.is_none unpacked_element
+        && List.exists el ~f:(fun arg ->
+               match arg with
+               | Aast_defs.Anormal (_, _, EnumClassLabel (None, n))
+                 when matches_auto_complete_suffix n ->
+                 true
+               | _ -> false)
+      then
+        Some ((), p, Aast.Omitted)
+      else
+        unpacked_element
+    in
     (* For special functions and pseudofunctions with a definition in an HHI
      * file.
      *)
@@ -6439,7 +6472,6 @@ end = struct
                       (set_returns_readonly
                          ctxt.support_readonly_return
                          default));
-                ft_require_package = None;
                 ft_instantiated = true;
               } )
         in
@@ -6631,8 +6663,14 @@ end = struct
       let ty = MakeType.default_construct r in
       (env, tel, None, ty, should_forget_fakes)
     | Some
-        { ce_visibility = vis; ce_type = (lazy m); ce_deprecated; ce_flags; _ }
-      ->
+        {
+          ce_visibility = vis;
+          ce_type = (lazy m);
+          ce_deprecated;
+          ce_flags;
+          ce_package_requirement;
+          _;
+        } ->
       let def_pos = get_pos m in
       Option.iter
         ~f:(Typing_error_utils.add_typing_error ~env)
@@ -6663,7 +6701,7 @@ end = struct
                ~use_pos:p
                ~def_pos
                env
-               ft.ft_require_package);
+               ce_package_requirement);
 
           (* This creates type variables for non-denotable type parameters on constructors.
            * These are notably different from the tparams on the class, which are handled
@@ -6708,7 +6746,7 @@ end = struct
           in
           (env, fty)
         | _ ->
-          Errors.internal_error p "Expected function type for constructor";
+          Diagnostics.internal_error p "Expected function type for constructor";
           Env.fresh_type_error env p
       in
       let (env, (tel, typed_unpack_element, _ty, should_forget_fakes)) =
@@ -9473,7 +9511,8 @@ end = struct
       (env, Aast.Return None)
     | Return (Some e) ->
       let env = Typing_return.check_inout_return pos env in
-      let Typing_env_return_info.{ return_type; return_disposable } =
+      let Typing_env_return_info.
+            { return_type; return_disposable; return_ignore_readonly } =
         Env.get_return env
       in
       let return_type =
@@ -9483,6 +9522,7 @@ end = struct
       let expected =
         Some
           (ExpectedTy.make
+             ~ignore_readonly:return_ignore_readonly
              (Aast_utils.get_expr_pos e)
              Reason.URreturn
              return_type)
@@ -9518,6 +9558,7 @@ end = struct
        * statement is the problem, not the return type itself. *)
       let (env, ty_err_opt) =
         Typing_coercion.coerce_type
+          ~ignore_readonly:return_ignore_readonly
           (Aast_utils.get_expr_pos e)
           Reason.URreturn
           env
@@ -9832,13 +9873,17 @@ end = struct
             in
             (env, (pos, Expr te))
           | None ->
-            Errors.internal_error pos "Missing type while checking Concurrent";
+            Diagnostics.internal_error
+              pos
+              "Missing type while checking Concurrent";
             stmt env s)
         | Expr _e ->
           (match te_ty_opt with
           | Some (te, _ty) -> (env, (pos, Expr te))
           | None ->
-            Errors.internal_error pos "Missing type while checking Concurrent";
+            Diagnostics.internal_error
+              pos
+              "Missing type while checking Concurrent";
             stmt env s)
         | _ -> stmt env s
       in
@@ -9922,7 +9967,7 @@ end = struct
        * where $x is non-null. *)
       let finally_w_cont env _key = finally_w_cont fb env in
       let (env, locals_map) =
-        Errors.ignore_ (fun () ->
+        Diagnostics.ignore_ (fun () ->
             CMap.map_env finally_w_cont env initial_locals)
       in
       let union env _key = LEnv.union_contextopts ~join_pos env in
@@ -9978,9 +10023,9 @@ end = struct
       if (not (List.is_empty block)) && not last then
         match LEnv.get_cont_option env C.Next with
         | Some _ ->
-          Errors.add_error
+          Diagnostics.add_diagnostic
             Nast_check_error.(
-              to_user_error
+              to_user_diagnostic
               @@
               if is_default then
                 Default_fallthrough switch_pos
@@ -10523,7 +10568,7 @@ end = struct
         let (env, tb) =
           if disable then
             let () =
-              Errors.internal_error
+              Diagnostics.internal_error
                 pos
                 ("Type inference for this function has been disabled by the "
                 ^ SN.UserAttributes.uaDisableTypecheckerInternal
@@ -10606,12 +10651,12 @@ end = struct
     in
 
     let (env, dynamic_body) =
-      Errors.try_with_result
+      Diagnostics.try_with_result
         (fun () ->
           fun_ ~disable env dynamic_return_info pos f.f_body f.f_fun_kind)
         (fun env_and_dynamic_body error ->
           if not @@ TCO.everything_sdt env.genv.tcopt then
-            Errors.function_is_not_dynamically_callable name error;
+            Diagnostics.function_is_not_dynamically_callable name error;
           env_and_dynamic_body)
     in
     (env, dynamic_params, dynamic_body, dynamic_return_ty)
@@ -10624,6 +10669,7 @@ end = struct
       ~closure_class_name
       ~is_expr_tree_virtual_expr
       ~should_invalidate_fakes
+      ?(ignore_readonly = false)
       env
       lambda_pos
       decl_ft
@@ -10926,7 +10972,13 @@ end = struct
     let env =
       Env.set_return
         env
-        (Typing_return.make_info hint_pos f.f_fun_kind [] env hret)
+        (Typing_return.make_info
+           ~ignore_readonly
+           hint_pos
+           f.f_fun_kind
+           []
+           env
+           hret)
     in
     let local_tpenv = Env.get_tpenv env in
     let sound_dynamic_check_saved_env = env in
@@ -11098,13 +11150,15 @@ end = struct
     (* Is the return type declared? *)
     let is_explicit = Option.is_some (hint_of_type_hint f.f_ret) in
     let check_body_under_known_params
-        ~ty_mismatch_opt ~supportdyn env ?ret_ty ft : env * _ * locl_ty =
+        ~ty_mismatch_opt ~supportdyn ?(ignore_readonly = false) env ?ret_ty ft :
+        env * _ * locl_ty =
       let (env, (tefun, ft, support_dynamic_type)) =
         closure_make
           ~should_invalidate_fakes
           ~supportdyn
           ~closure_class_name
           ~is_expr_tree_virtual_expr
+          ~ignore_readonly
           ?ret_ty
           env
           p
@@ -11140,7 +11194,8 @@ end = struct
      *)
       when Tast.is_under_dynamic_assumptions env.checked ->
       make_result env p Aast.Omitted (MakeType.dynamic (Reason.witness p))
-    | Some (_pos, _ur, supportdyn, ty, Tfun expected_ft)
+    | Some
+        (_pos, _ur, supportdyn, ty, Tfun expected_ft, expected_ignore_readonly)
       when expected_ft.ft_instantiated ->
       (* First check that arities match up *)
       let arity_ok =
@@ -11220,10 +11275,17 @@ end = struct
       check_body_under_known_params
         ~ty_mismatch_opt
         ~supportdyn
+        ~ignore_readonly:expected_ignore_readonly
         env
         ?ret_ty
         expected_ft
     | _ ->
+      (* Extract ignore_readonly from expected type if present *)
+      let expected_ignore_readonly =
+        match eexpected with
+        | Some (_, _, _, _, _, ignore_readonly) -> ignore_readonly
+        | None -> false
+      in
       (* If all parameters are annotated with explicit types, then type-check
        * the body under those assumptions and pick up the result type *)
       let all_explicit_params =
@@ -11243,11 +11305,12 @@ end = struct
         check_body_under_known_params
           ~ty_mismatch_opt:None
           ~supportdyn:false
+          ~ignore_readonly:expected_ignore_readonly
           env
           declared_ft
       ) else (
         match eexpected with
-        | Some (_pos, _ur, supportdyn, expected_ty, _)
+        | Some (_pos, _ur, supportdyn, expected_ty, _, _)
           when TUtils.is_mixed env expected_ty
                || is_nonnull expected_ty
                || is_dynamic expected_ty ->
@@ -11297,6 +11360,7 @@ end = struct
           check_body_under_known_params
             ~ty_mismatch_opt:None
             ~supportdyn
+            ~ignore_readonly:expected_ignore_readonly
             env
             expected_ft
         | _ ->
@@ -11318,6 +11382,7 @@ end = struct
           check_body_under_known_params
             ~ty_mismatch_opt:None
             ~supportdyn
+            ~ignore_readonly:expected_ignore_readonly
             env
             ~ret_ty:declared_ft.ft_ret
             declared_ft
@@ -11613,7 +11678,7 @@ end = struct
           (env, mk (Reason.witness p, Tclass (c, exact, tyl)))
         | None ->
           (* Naming phase has already checked and replaced CIself with CI if outside a class *)
-          Errors.internal_error p "Unexpected CIself";
+          Diagnostics.internal_error p "Unexpected CIself";
           Env.fresh_type_error env p
       in
       make_result env [] Aast.CIself ty
@@ -12085,7 +12150,7 @@ end = struct
       let (_, _, lval_) = e1 in
       (match (op, lval_) with
       | (Ast_defs.QuestionQuestion, Class_get _) ->
-        Errors.experimental_feature
+        Diagnostics.experimental_feature
           p
           "null coalesce assignment operator with static properties";
         expr_error env p outer
@@ -12217,7 +12282,7 @@ end = struct
       in
       let (env, expected) =
         match expected with
-        | Some (pos, ur, _, _, Tnewtype (fs, [ty; _], bound))
+        | Some (pos, ur, _, _, Tnewtype (fs, [ty; _], bound), _)
           when SN.Classes.is_typed_format_string fs ->
           let (env, fresh_ty) = Env.fresh_type env p in
           let expected =
@@ -13580,6 +13645,7 @@ end = struct
                  ce_visibility = vis;
                  ce_type = (lazy member_decl_ty);
                  ce_deprecated;
+                 ce_package_requirement;
                  _;
                } as ce) ->
             let def_pos = get_pos member_decl_ty in
@@ -13623,7 +13689,7 @@ end = struct
                      ~use_pos:p
                      ~def_pos
                      env
-                     ft.ft_require_package);
+                     ce_package_requirement);
 
                 let ((env, ty_err_opt1), explicit_targs) =
                   Phase.localize_targs
@@ -13737,7 +13803,7 @@ end = struct
   let file_attributes env file_attrs =
     (* Disable checking of error positions, as file attributes have spans that
      * aren't subspans of the class or function into which they are copied *)
-    Errors.run_with_span Pos.none @@ fun () ->
+    Diagnostics.run_with_span Pos.none @@ fun () ->
     List.map_env env file_attrs ~f:(fun env fa ->
         let (env, user_attributes) =
           User_attribute.attributes_check_def

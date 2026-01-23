@@ -28,6 +28,7 @@
 #include <thrift/lib/cpp2/Flags.h>
 #include <thrift/lib/cpp2/async/ResponseChannel.h>
 #include <thrift/lib/cpp2/security/extensions/ThriftParametersContext.h>
+#include <thrift/lib/cpp2/security/extensions/ThriftParametersServerExtension.h>
 #include <thrift/lib/cpp2/server/Cpp2Connection.h>
 #include <thrift/lib/cpp2/server/LoggingEvent.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
@@ -40,6 +41,8 @@
 // DANGER: If you disable this overly broadly, this can completely break
 // workloads that rely on passing FDs over Unix sockets + Thrift.
 THRIFT_FLAG_DEFINE_bool(enable_server_async_fd_socket, /* default = */ true);
+
+THRIFT_FLAG_DEFINE_int64(thrift_key_update_threshold, 0);
 
 namespace apache::thrift {
 
@@ -357,22 +360,46 @@ void Cpp2Worker::updateSSLStats(
   }
 }
 
-wangle::AcceptorHandshakeHelper::UniquePtr Cpp2Worker::createSSLHelper(
+wangle::AcceptorHandshakeHelper::UniquePtr Cpp2Worker::makeHandshaker(
     const std::vector<uint8_t>& bytes,
     const folly::SocketAddress& clientAddr,
     std::chrono::steady_clock::time_point acceptTime,
     wangle::TransportInfo& tInfo) {
+  // Cpp2Worker has set itself up to be the first (and only) PeekCallback that
+  // will be invoked. This method is responsible for returning the
+  // HandshakeHelper that will be used to drive the rest of the connection
+  // establishment procedure to completion.
   if (accConfig_->fizzConfig.enableFizz) {
-    auto helper =
-        fizzPeeker_.getThriftHelper(bytes, clientAddr, acceptTime, tInfo);
-    if (!helper) {
+    // The Fizz related settings are installed on the parent wangle::Acceptor
+    // fizz peeker
+    auto fizzPeeker = getFizzPeeker();
+    auto fizzContext = fizzPeeker->getContext();
+    auto sslContextManager = fizzPeeker->getSSLContextManager();
+
+    if (!(fizzContext && sslContextManager)) {
       return nullptr;
     }
-    if (auto parametersContext = getThriftParametersContext(clientAddr)) {
-      helper->setThriftParametersContext(
-          folly::copy_to_shared_ptr(*parametersContext));
-    }
-    return helper;
+
+    auto fizzHandshakeOptions = fizzPeeker->options();
+    fizzHandshakeOptions.setkeyUpdateThreshold(
+        THRIFT_FLAG(thrift_key_update_threshold));
+
+    auto transportOptions = server_->getFizzConfig().transportOptions;
+
+    auto thriftServerExtension = makeThriftServerExtension(clientAddr);
+
+    folly::DelayedDestructionUniquePtr<ThriftFizzAcceptorHandshakeHelper>
+        handshaker;
+    handshaker.reset(new ThriftFizzAcceptorHandshakeHelper(
+        std::move(thriftServerExtension),
+        fizzContext,
+        sslContextManager,
+        clientAddr,
+        acceptTime,
+        tInfo,
+        std::move(fizzHandshakeOptions),
+        std::move(transportOptions)));
+    return handshaker;
   }
   return defaultPeekingCallback_.getHelper(
       bytes, clientAddr, acceptTime, tInfo);
@@ -394,26 +421,27 @@ bool Cpp2Worker::shouldPerformSSL(
   }
 }
 
-std::optional<ThriftParametersContext> Cpp2Worker::getThriftParametersContext(
-    const folly::SocketAddress& clientAddr) {
+std::shared_ptr<ThriftParametersServerExtension>
+Cpp2Worker::makeThriftServerExtension(const folly::SocketAddress& clientAddr) {
   auto thriftConfigBase =
       folly::get_ptr(accConfig_->customConfigMap, "thrift_tls_config");
   if (!thriftConfigBase) {
-    return std::nullopt;
+    return nullptr;
   }
   assert(static_cast<ThriftTlsConfig*>((*thriftConfigBase).get()));
   auto thriftConfig = static_cast<ThriftTlsConfig*>((*thriftConfigBase).get());
   if (!thriftConfig->enableThriftParamsNegotiation) {
-    return std::nullopt;
+    return nullptr;
   }
 
-  auto thriftParametersContext = ThriftParametersContext();
-  thriftParametersContext.setUseStopTLS(
+  auto thriftParametersContext = std::make_shared<ThriftParametersContext>();
+  thriftParametersContext->setUseStopTLS(
       clientAddr.getFamily() == AF_UNIX || thriftConfig->enableStopTLS ||
       **ThriftServer::enableStopTLS());
-  thriftParametersContext.setUseStopTLSV2(
+  thriftParametersContext->setUseStopTLSV2(
       thriftConfig->enableStopTLSV2 || **ThriftServer::enableStopTLSV2());
-  return thriftParametersContext;
+  return std::make_shared<ThriftParametersServerExtension>(
+      thriftParametersContext);
 }
 
 wangle::AcceptorHandshakeHelper::UniquePtr Cpp2Worker::getHelper(
@@ -425,7 +453,7 @@ wangle::AcceptorHandshakeHelper::UniquePtr Cpp2Worker::getHelper(
     return wangle::AcceptorHandshakeHelper::UniquePtr(
         new wangle::UnencryptedAcceptorHandshakeHelper());
   }
-  return createSSLHelper(bytes, clientAddr, acceptTime, ti);
+  return makeHandshaker(bytes, clientAddr, acceptTime, ti);
 }
 
 void Cpp2Worker::requestStop() {

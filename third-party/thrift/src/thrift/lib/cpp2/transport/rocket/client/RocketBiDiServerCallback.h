@@ -57,12 +57,12 @@ class RocketBiDiServerCallback : public BiDiServerCallback {
   bool onInitialPayload(FirstResponsePayload&&, folly::EventBase*);
   void onInitialError(folly::exception_wrapper);
 
-  void onSinkRequestN(uint64_t tokens);
+  void onSinkRequestN(int32_t tokens);
   void onSinkCancel();
 
   // Stream fns
 
-  bool onStreamRequestN(uint64_t tokens) override;
+  bool onStreamRequestN(int32_t tokens) override;
   bool onStreamCancel() override;
 
   // Connection close special case

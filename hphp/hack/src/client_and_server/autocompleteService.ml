@@ -101,15 +101,7 @@ let expand_and_strip_dynamic env ty =
   ty
 
 let matches_auto_complete_suffix x =
-  String.length x >= AutocompleteTypes.autocomplete_token_length
-  &&
-  let suffix =
-    String.sub
-      x
-      ~pos:(String.length x - AutocompleteTypes.autocomplete_token_length)
-      ~len:AutocompleteTypes.autocomplete_token_length
-  in
-  String.equal suffix AutocompleteTypes.autocomplete_token
+  String.is_suffix x ~suffix:AutocompleteTypes.autocomplete_token
 
 (* Does [str] look like something we should offer code completion on? *)
 let is_auto_complete str : bool =
@@ -2519,7 +2511,7 @@ let go_ctx
   let tast = tast.Tast_with_dynamic.under_normal_assumptions in
   (visitor ctx autocomplete_context sienv_ref naming_table tast)#go ctx tast;
 
-  Errors.ignore_ (fun () ->
+  Diagnostics.ignore_ (fun () ->
       let start_time = Unix.gettimeofday () in
       let autocomplete_items = !autocomplete_items in
       let results =

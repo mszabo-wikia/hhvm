@@ -445,7 +445,7 @@ class FirstRequestProcessorStream : public StreamClientCallback,
   void resetServerCallback(StreamServerCallback&) override { std::terminate(); }
 
   void onStreamCancel() override { clientCallback_ = nullptr; }
-  bool onStreamRequestN(uint64_t) override { return true; }
+  bool onStreamRequestN(int32_t) override { return true; }
   void resetClientCallback(StreamClientCallback& clientCallback) override {
     clientCallback_ = &clientCallback;
   }
@@ -536,7 +536,7 @@ class FirstRequestProcessorSink : public SinkClientCallback,
   void onFinalResponseError(folly::exception_wrapper) override {
     std::terminate();
   }
-  [[nodiscard]] bool onSinkRequestN(uint64_t) override { std::terminate(); }
+  [[nodiscard]] bool onSinkRequestN(int32_t) override { std::terminate(); }
   void resetServerCallback(SinkServerCallback&) override { std::terminate(); }
 
   bool onSinkNext(StreamPayload&&) override { return true; }
@@ -624,7 +624,7 @@ class FirstRequestProcessorBiDi : public BiDiClientCallback,
         [&](...) { clientCallback_->onFirstResponseError(std::move(ew)); });
   }
 
-  bool onSinkRequestN(uint64_t) override { std::terminate(); }
+  bool onSinkRequestN(int32_t) override { std::terminate(); }
   void resetServerCallback(BiDiServerCallback&) override { std::terminate(); }
 
   bool onSinkNext(StreamPayload&&) override { std::terminate(); }
@@ -640,7 +640,7 @@ class FirstRequestProcessorBiDi : public BiDiClientCallback,
   bool onStreamComplete() override { std::terminate(); }
 
   bool onStreamCancel() override { std::terminate(); }
-  bool onStreamRequestN(uint64_t) override { std::terminate(); }
+  bool onStreamRequestN(int32_t) override { std::terminate(); }
 
  private:
   const uint16_t protocolId_;

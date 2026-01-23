@@ -6,15 +6,11 @@
  *
  *)
 
-val get_save_state_result_props_json :
-  SaveStateServiceTypes.save_state_result -> (string * Hh_json.json) list
-
 val print_error_list :
   Out_channel.t ->
   stale_msg:string option ->
   output_json:bool ->
-  error_format:Errors.format option ->
-  error_list:Errors.finalized_error list ->
-  save_state_result:SaveStateServiceTypes.save_state_result option ->
+  error_format:Diagnostics.format option ->
+  error_list:Diagnostics.finalized_diagnostic list ->
   recheck_stats:Telemetry.t option ->
   unit

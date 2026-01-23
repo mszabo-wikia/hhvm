@@ -62,7 +62,6 @@ type client_mode =
   | MODE_REWRITE_DECLARATIONS
   | MODE_REWRITE_LAMBDA_PARAMETERS of string list
   | MODE_SAVE_NAMING of string
-  | MODE_SAVE_STATE of string
   | MODE_SEARCH of string
   | MODE_SERVER_RAGE
   | MODE_STATS
@@ -88,11 +87,10 @@ type client_check_env = {
   config: (string * string) list;
   custom_hhi_path: string option;
   custom_telemetry_data: (string * string) list;
-  error_format: Errors.format option;
+  error_format: Diagnostics.format option;
   force_dormant_start: bool;
   from: string;
   show_spinner: bool;
-  gen_saved_ignore_type_errors: bool;
   ignore_hh_version: bool;
   saved_state_ignore_hhconfig: bool;
   paths: string list;
@@ -117,7 +115,7 @@ type client_check_env = {
   is_interactive: bool;
       (** Determined based on the --from option. Affects UI behaviour in a
       number of places, e.g., error formatting and spinners. *)
-  warning_switches: Filter_errors.switch list;
+  warning_switches: Filter_diagnostics.switch list;
   dump_config: bool;
   find_my_tests_max_distance: int;
   find_my_tests_max_test_files: int option;

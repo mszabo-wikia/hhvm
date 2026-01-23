@@ -195,3 +195,52 @@ let check_instantiation
     | CI _
     | CIexpr _ ->
       ()
+
+let check_class_def
+    (env : Typing_env_types.env)
+    (c : Nast.class_)
+    (tc : Decl_provider.class_decl) : unit =
+  if TypecheckerOptions.needs_concrete env.genv.tcopt then
+    (* Check for __NeedsConcrete on instance methods (non-static methods) and constructors *)
+    List.iter c.c_methods ~f:(fun m ->
+        if
+          Naming_attributes.mem
+            Naming_special_names.UserAttributes.uaNeedsConcrete
+            m.m_user_attributes
+        then
+          let meth_name = snd m.m_name in
+          if String.equal meth_name Naming_special_names.Members.__construct
+          then
+            (* __NeedsConcrete on constructor *)
+            Typing_error_utils.add_typing_error
+              ~env
+              Typing_error.(
+                primary
+                @@ Primary.Needs_concrete_on_constructor
+                     { pos = fst m.m_name; class_name = snd c.c_name })
+          else if not m.m_static then
+            (* __NeedsConcrete on instance method *)
+            Typing_error_utils.add_typing_error
+              ~env
+              Typing_error.(
+                primary
+                @@ Primary.Needs_concrete_on_instance_method
+                     {
+                       pos = fst m.m_name;
+                       class_name = snd c.c_name;
+                       meth_name;
+                     })
+          else if
+            (* Check for __NeedsConcrete on static methods in final classes *)
+            Folded_class.final tc && not (Folded_class.abstract tc)
+          then
+            Typing_error_utils.add_typing_error
+              ~env
+              Typing_error.(
+                primary
+                @@ Primary.Needs_concrete_in_final_class
+                     {
+                       pos = fst m.m_name;
+                       class_name = snd c.c_name;
+                       meth_name;
+                     }))

@@ -13,8 +13,6 @@ get_filename_component(BOOST_LIBRARY_DIR "${FIRST_LIB}" DIRECTORY)
 get_target_property(ZSTD_INCLUDE_DIR zstd INTERFACE_INCLUDE_DIRECTORIES)
 get_target_property(ZSTD_LIBRARY zstd INTERFACE_LINK_LIBRARIES)
 get_target_property(JEMALLOC_INCLUDE_DIR jemalloc INTERFACE_INCLUDE_DIRECTORIES)
-get_target_property(GLOG_INCLUDE_DIR glog INTERFACE_INCLUDE_DIRECTORIES)
-get_target_property(GLOG_LIBRARY glog INTERFACE_LINK_LIBRARIES)
 
 get_filename_component(GLOG_LIBRARY_DIR "${GLOG_LIBRARY}" DIRECTORY)
 
@@ -22,13 +20,12 @@ find_package(FLEX REQUIRED)
 # Thrift uses `%code`, which isn't in 2.x
 find_package(BISON 3.0 REQUIRED)
 
-
 ExternalProject_Add(
   bundled_thrift
   SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/
   BUILD_ALWAYS ON
   CMAKE_ARGS
-    "-DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}"
+    "-DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH};${GLOG_INSTALL_DIR}"
     -DCMAKE_MODULE_PATH=${CMAKE_SOURCE_DIR}/CMake
     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
     -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
@@ -48,18 +45,21 @@ ExternalProject_Add(
     -DBoost_USE_STATIC_LIBS=${Boost_USE_STATIC_LIBS}
     -DBoost_INCLUDE_DIR=${BOOST_INCLUDE_DIR}
     "-DBOOST_LIBRARYDIR=${BOOST_LIBRARY_DIR}"
-    -DGLOG_INCLUDEDIR=${GLOG_INCLUDE_DIR}
-    -DGLOG_LIBRARYDIR=${GLOG_LIBRARY_DIR}
     "-DZSTD_INCLUDE_DIRS=${ZSTD_INCLUDE_DIR}"
     "-DZSTD_LIBRARIES=${ZSTD_LIBRARY}"
+    "-Dgflags_DIR=${gflags_DIR}"
 
+    "-Dfizz_DIR=${FIZZ_INSTALL_DIR}/lib/cmake/fizz"
     "-DFizz_DIR=${FIZZ_INSTALL_DIR}/lib/cmake/fizz"
     "-Dfmt_DIR=${fmt_DIR}"
     "-Dfolly_DIR=${FOLLY_INSTALL_DIR}/lib/cmake/folly"
     "-Dwangle_DIR=${WANGLE_INSTALL_DIR}/lib/cmake/wangle"
+    "-Dmvfst_DIR=${MVFST_INSTALL_DIR}/lib/cmake/mvfst"
 
     "-DCMAKE_C_FLAGS=${CMAKE_C_FLAGS}"
     "-DCMAKE_CXX_FLAGS=-I${JEMALLOC_INCLUDE_DIR} ${CMAKE_CXX_FLAGS}"
+
+    -Denable_tests=OFF
 )
 ExternalProject_Get_property(bundled_thrift INSTALL_DIR)
 
@@ -68,6 +68,7 @@ set(
   fizz
   fmt
   folly
+  mvfst
   proxygen
   wangle
   zstd
@@ -79,50 +80,27 @@ target_include_directories(thrift INTERFACE "${INSTALL_DIR}/include")
 target_link_libraries(thrift INTERFACE ${THRIFT_DEPS} ${OPENSSL_LIBRARIES})
 set(THRIFT_INSTALL_DIR "${INSTALL_DIR}" PARENT_SCOPE)
 
-# ----- Export a single 'thrift' library target -----
+list(APPEND THRIFT_INSTALL_TARGETS
+  thriftcpp2
+  async
+  serverdbginfo
+  transport
+  thriftanyrep
+  thrifttype
+  thrifttyperep
+  thriftprotocol
+  rpcmetadata
+  thriftannotation
+  thriftmetadata
+  concurrency
+  runtime
+  thrift-core
+  common
+)
 
-# Usage: thrift_lib NAME [DEP1 [DEP2...]]
-macro(thrift_lib NAME)
-  set(DEPENDENCIES)
-  foreach(DEP ${ARGN})
-    list(APPEND DEPENDENCIES "thrift_lib_${DEP}")
-  endforeach()
-  add_library("thrift_lib_${NAME}" STATIC IMPORTED)
-  set_target_properties(
-    "thrift_lib_${NAME}"
-    PROPERTIES
-    IMPORTED_LOCATION
-    "${INSTALL_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}${NAME}${CMAKE_STATIC_LIBRARY_SUFFIX}"
-  )
-
-  if(DEPENDENCIES)
-    # On newer versions of CMake, we can use `target_link_libraries()`, but this isn't supported
-    # on `IMPORTED` targets in the oldest versions we currently support.
-    set_target_properties(
-      "thrift_lib_${NAME}"
-      PROPERTIES
-      INTERFACE_LINK_LIBRARIES
-      "${DEPENDENCIES}"
-    )
-  endif()
-
-  target_link_libraries(thrift INTERFACE "thrift_lib_${NAME}")
-endmacro()
-
-thrift_lib(concurrency)
-thrift_lib(rpcmetadata)
-thrift_lib(thrift-core)
-thrift_lib(thriftmetadata)
-thrift_lib(thriftannotation)
-thrift_lib(thrifttype)
-thrift_lib(thrifttyperep thriftannotation)
-thrift_lib(thriftanyrep thriftannotation thrifttype)
-
-thrift_lib(transport concurrency thrift-core rpcmetadata)
-thrift_lib(async concurrency transport)
-thrift_lib(thriftprotocol thrift-core)
-thrift_lib(thriftfrozen2 thriftmetadata thriftprotocol)
-thrift_lib(thriftcpp2 rpcmetadata thriftmetadata thriftannotation thriftanyrep thrifttyperep thriftfrozen2 thriftprotocol transport async)
+foreach (target ${THRIFT_INSTALL_TARGETS})
+  target_link_libraries(thrift INTERFACE "${INSTALL_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}${target}${CMAKE_STATIC_LIBRARY_SUFFIX}")
+endforeach()
 
 # ----- Export the thrift compiler as a target -----
 

@@ -45,6 +45,7 @@ std::shared_ptr<const AcceptorConfiguration> HTTPServerAcceptor::makeConfig(
       ipConfig.allowInsecureConnectionsOnSecureServer;
   conf->enableTCPFastOpen = ipConfig.enableTCPFastOpen;
   conf->fastOpenQueueSize = ipConfig.fastOpenQueueSize;
+  conf->enableReuseAddr = opts.enableReuseAddr;
   if (ipConfig.ticketSeeds) {
     conf->initialTicketSeeds = *ipConfig.ticketSeeds;
   }
@@ -88,8 +89,7 @@ void HTTPServerAcceptor::setCompletionCallback(std::function<void()> f) {
   completionCallback_ = f;
 }
 
-HTTPServerAcceptor::~HTTPServerAcceptor() {
-}
+HTTPServerAcceptor::~HTTPServerAcceptor() = default;
 
 HTTPTransactionHandler* HTTPServerAcceptor::newHandler(
     HTTPTransaction& txn, HTTPMessage* msg) noexcept {

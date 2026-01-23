@@ -456,12 +456,10 @@ let remove_items_from_reverse_naming_table_or_build_new_reverse_naming_table
   HackEventLogger.naming_from_saved_state_end t;
   Hh_logger.log_duration "NAMING_FROM_SAVED_STATE_END" t
 
-(* Prechecked files are gated with a flag and not supported in AI/check/saving
- * of saved state modes. *)
+(* Prechecked files are gated with a flag and not supported in AI/check modes. *)
 let use_prechecked_files (genv : ServerEnv.genv) : bool =
   ServerPrecheckedFiles.should_use genv.options genv.local_config
-  && (not (ServerArgs.check_mode genv.options))
-  && Option.is_none (ServerArgs.save_filename genv.options)
+  && not (ServerArgs.check_mode genv.options)
 
 let file_names_to_deps names deps =
   let open Typing_deps in
@@ -992,7 +990,7 @@ let full_init
       env
       cgroup_steps
   in
-  ServerInitCommon.validate_no_errors env.errorl;
+  ServerInitCommon.validate_no_errors env.diagnostics;
   let fnl = Naming_table.get_files env.naming_table in
   ServerInitCommon.defer_or_do_type_check
     genv
@@ -1016,7 +1014,7 @@ let parse_only_init
 
 (** We'll adjust the forward and reverse naming table to reflect
     changes to files which changed since the saved-state. We'll also
-    reflect changes in files which had [phase=Errors.(Naming|Parsing)]
+    reflect changes in files which had [phase=Diagnostics.(Naming|Parsing)]
     as well. Notionally that's because our current mechanism for handling
     duplicate-name-errors requires all affected files to go through
     the "update reverse naming table" procedure. (but it's redundant
@@ -1127,7 +1125,7 @@ let update_naming_table
         ~telemetry_label:"post_ss1.naming"
         ~cgroup_steps
     in
-    ServerInitCommon.validate_no_errors env.errorl;
+    ServerInitCommon.validate_no_errors env.diagnostics;
 
     let new_naming_table = env.naming_table in
     let env =
