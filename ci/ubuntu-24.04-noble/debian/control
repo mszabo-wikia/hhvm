@@ -34,7 +34,6 @@ Build-Depends:
   libexpat-dev,
   libgd-dev,
   libgmp3-dev,
-  libgoogle-glog-dev,
   libgoogle-perftools-dev,
   libiberty-dev,
   libiconv-hook-dev,
