@@ -86,6 +86,7 @@ list(APPEND CXX_SOURCES ${files})
 add_definitions(-DNO_LIB_GFLAGS)
 add_definitions(-DLIBMC_FBTRACE_DISABLE)
 add_definitions(-DHAVE_CONFIG_H)
+add_definitions(-DMCROUTER_OSS_BUILD)
 
 include_directories("${CMAKE_SOURCE_DIR}")
 include_directories("${CMAKE_BINARY_DIR}")
