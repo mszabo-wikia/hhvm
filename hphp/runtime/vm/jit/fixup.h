@@ -219,13 +219,6 @@ size_t size();
  */
 bool processFixupForVMFrame(VMFrame frame);
 
-/*
- * Perform a fixup of the VM registers for a stack whose first frame is `rbp`.
- *
- * Returns whether we successfully performed the fixup.  (We assert on failure
- * if `soft` is not set).
- */
-bool fixupWork(ActRec* rbp, bool soft = false);
 }
 
 namespace detail {
