@@ -20,7 +20,7 @@ let load_internal
     ~saved_state_type:_ =
   failwith "Not implemented"
 
-let prepare_download_dir () = failwith "Not implemented"
+let prepare_download_dir ~saved_state_cache_limit:_ = failwith "Not implemented"
 
 let get_saved_state_target_path ~download_dir:_ ~manifold_path:_ =
   failwith "Not implemented"
