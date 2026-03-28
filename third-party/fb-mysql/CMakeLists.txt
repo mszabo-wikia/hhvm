@@ -42,7 +42,10 @@ ExternalProject_Add(
   -DWITH_ZSTD=system
   "-DZSTD_SYSTEM_LIBRARY=$<TARGET_PROPERTY:zstd,INTERFACE_LINK_LIBRARIES>"
   "-DPATH_TO_ZSTD=$<TARGET_PROPERTY:zstd,INTERFACE_INCLUDE_DIRECTORIES>"
+  -DINSTALL_EXTRA_HEADERS=On
   ${EXTRA_ARGS}
+  PREFIX mysql
+  INSTALL_DIR mysql/server
 )
 
 set(DEPS lz4 re2 zstd)
@@ -53,10 +56,13 @@ add_dependencies(bundled_fbmysqlclient ${DEPS})
 add_library(fbmysqlclient_deps INTERFACE)
 target_link_libraries(fbmysqlclient_deps INTERFACE ${DEPS})
 
+ExternalProject_Get_Property(bundled_fbmysqlclient PREFIX)
 ExternalProject_Get_Property(bundled_fbmysqlclient INSTALL_DIR)
 
 add_dependencies(fbmysqlclient bundled_fbmysqlclient)
-target_include_directories(fbmysqlclient INTERFACE "${INSTALL_DIR}/include")
+# Squangle sometimes includes MySQL headers as <mysql.h>, sometimes as "mysql/server/include/mysql.h".
+# Indulge it.
+target_include_directories(fbmysqlclient INTERFACE "${CMAKE_CURRENT_BINARY_DIR}" "${INSTALL_DIR}/include")
 target_link_libraries(fbmysqlclient INTERFACE
   "${INSTALL_DIR}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}mysqlclient${CMAKE_STATIC_LIBRARY_SUFFIX}"
   fbmysqlclient_deps

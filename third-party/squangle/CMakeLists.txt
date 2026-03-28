@@ -14,6 +14,8 @@ get_target_property(JEMALLOC_INCLUDE_DIR jemalloc INTERFACE_INCLUDE_DIRECTORIES)
 get_target_property(fbmysqlclient_INCLUDE_DIR fbmysqlclient INTERFACE_INCLUDE_DIRECTORIES)
 get_target_property(re2_INCLUDE_DIR re2 INTERFACE_INCLUDE_DIRECTORIES)
 
+string(JOIN " -I" FBMYSQLCLIENT_INCLUDE_DIRS ${fbmysqlclient_INCLUDE_DIR})
+
 ExternalProject_Add(
   bundled_squangle
   SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src/
@@ -29,8 +31,9 @@ ExternalProject_Add(
     "${CMAKE_COMMAND}" -E copy
     "${CMAKE_CURRENT_SOURCE_DIR}/squangle-CMakeLists.txt"
     <SOURCE_DIR>/CMakeLists.txt
+  LIST_SEPARATOR "!!"
   CMAKE_ARGS
-    "-DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}"
+    "-DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}!!${GLOG_INSTALL_DIR}"
     -DCMAKE_MODULE_PATH=${CMAKE_SOURCE_DIR}/CMake
     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
     -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
@@ -52,10 +55,9 @@ ExternalProject_Add(
     "-Dfmt_DIR=${fmt_DIR}"
     "-Dfolly_DIR=${FOLLY_INSTALL_DIR}/lib/cmake/folly"
 
-    "-Dfbmysqlclient_INCLUDE_DIR=${fbmysqlclient_INCLUDE_DIR}"
     "-Dre2_INCLUDE_DIR=${re2_INCLUDE_DIR}"
 
-    "-DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS} -I${JEMALLOC_INCLUDE_DIR}"
+    "-DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS} -I${JEMALLOC_INCLUDE_DIR} -I${FBMYSQLCLIENT_INCLUDE_DIRS}"
 )
 ExternalProject_Get_property(bundled_squangle INSTALL_DIR)
 
