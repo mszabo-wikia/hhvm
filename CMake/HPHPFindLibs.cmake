@@ -296,6 +296,9 @@ endif()
 # Needed by fbthrift.
 find_package(Xxhash REQUIRED)
 
+find_package(LibLZMA MODULE REQUIRED)
+find_package(Snappy CONFIG REQUIRED)
+
 include_directories(${HPHP_HOME}/hphp)
 
 macro(hphp_link target)
@@ -438,6 +441,8 @@ macro(hphp_link target)
 
   target_link_libraries(${target} ${VISIBILITY} afdt)
   target_link_libraries(${target} ${VISIBILITY} mbfl)
+
+  target_link_libraries(${target} ${VISIBILITY} ${LIBLZMA_LIBRARIES} Snappy::snappy)
 
   if (LINUX)
     target_link_libraries(${target} ${VISIBILITY} ${LIBUNWIND_LIBRARIES})
