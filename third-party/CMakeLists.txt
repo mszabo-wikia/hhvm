@@ -142,4 +142,5 @@ endif()
 ##### --- new style, but only depends on old style --- #####
 add_subdirectory(watchman)
 
+add_subdirectory(magic_enum)
 add_subdirectory(usdt)
