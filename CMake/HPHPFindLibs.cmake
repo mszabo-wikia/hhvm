@@ -434,6 +434,7 @@ macro(hphp_link target)
   target_link_libraries(${target} ${VISIBILITY} wangle)
   target_link_libraries(${target} ${VISIBILITY} fizz)
   target_link_libraries(${target} ${VISIBILITY} brotli)
+  target_link_libraries(${target} ${VISIBILITY} magic_enum)
   target_link_libraries(${target} ${VISIBILITY} hhbc_ast_header)
   target_link_libraries(${target} ${VISIBILITY} hack_rust_ffi_bridge)
 
