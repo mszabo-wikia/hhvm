@@ -37,7 +37,7 @@ ExternalProject_Add(
     "CMake/"
   LIST_SEPARATOR "!!"
   CMAKE_ARGS
-    "-DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}!!${GLOG_INSTALL_DIR}"
+    "-DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}!!${GLOG_INSTALL_DIR}!!${GFLAGS_INSTALL_DIR}"
     -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
     -DCMAKE_INSTALL_INCLUDEDIR=include
     -DCMAKE_INSTALL_LIBDIR=lib
@@ -60,6 +60,8 @@ ExternalProject_Add(
     "-DOPENSSL_INCLUDE_DIR=${OPENSSL_INCLUDE_DIR}"
 
     "-Dragel_EXECUTABLE=$<TARGET_FILE:ragel>"
+
+    "-Dgflags_DIR=${gflags_DIR}"
 
     "-Dfmt_DIR=${fmt_DIR}"
     "-Dfolly_DIR=${FOLLY_INSTALL_DIR}/lib/cmake/folly"
