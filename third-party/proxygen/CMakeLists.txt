@@ -50,6 +50,7 @@ ExternalProject_Add(
 
     -Dgflags_DIR=${gflags_DIR}
 
+    "-DFizz_DIR=${FIZZ_INSTALL_DIR}/lib/cmake/fizz"
     "-Dfizz_DIR=${FIZZ_INSTALL_DIR}/lib/cmake/fizz"
     "-Dfmt_DIR=${fmt_DIR}"
     "-Dfolly_DIR=${FOLLY_INSTALL_DIR}/lib/cmake/folly"
