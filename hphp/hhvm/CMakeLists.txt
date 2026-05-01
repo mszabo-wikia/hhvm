@@ -3,6 +3,10 @@ include(HHVMExtensionConfig)
 set(CXX_SOURCES)
 auto_sources(files "*.cpp" "")
 list(APPEND CXX_SOURCES ${files})
+list(REMOVE_ITEM CXX_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/process-init.cpp)
+
+add_library(hphp_process_init STATIC process-init.cpp)
+hphp_link(hphp_process_init)
 
 option(ENABLE_LD_GOLD "Enable Hot Linker script using ld-gold" On)
 set(
@@ -28,9 +32,7 @@ endif()
 
 get_object_libraries_objects(additionalObjects ${HHVM_WHOLE_ARCHIVE_LIBRARIES})
 add_executable(hhvm ${CXX_SOURCES} ${additionalObjects})
-target_link_libraries(
-  hhvm ${HHVM_LINK_LIBRARIES} ${EZC_LINK_LIBRARIES} ${HRE_LINK_LIBRARIES}
-)
+target_link_libraries(hhvm hphp_process_init ${HHVM_LINK_LIBRARIES} ${EZC_LINK_LIBRARIES} ${HRE_LINK_LIBRARIES})
 link_object_libraries(hhvm ${HHVM_WHOLE_ARCHIVE_LIBRARIES})
 if (GOLD_FOUND AND ENABLE_LD_GOLD)
   if (CMAKE_CONFIGURATION_TYPES)

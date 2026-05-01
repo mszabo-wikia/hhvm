@@ -42,11 +42,30 @@ add_object_library(hphp_runtime_ext
   ${CXX_SOURCES} ${C_SOURCES} ${ASM_SOURCES} ${HEADER_SOURCES})
 auto_source_group("hphp_runtime_ext" "${CMAKE_CURRENT_SOURCE_DIR}"
   ${ASM_SOURCES} ${C_SOURCES} ${CXX_SOURCES} ${HEADER_SOURCES})
-target_link_libraries(hphp_runtime_ext hphp_runtime_static hphp_system)
+target_link_libraries(hphp_runtime_ext hphp_sbcc_format hphp_runtime_static hphp_system)
 object_library_ld_link_libraries(hphp_runtime_ext hphp_zend ${HRE_LINK_LIBRARIES})
 object_library_hphp_link(hphp_runtime_ext)
 HHVM_CONFIGURE_TARGET_FOR_EXTENSION_DEPENDENCIES(hphp_runtime_ext)
 HHVM_PUBLIC_HEADERS(ext ${HEADER_SOURCES})
+
+add_library(hphp_sbcc_format STATIC
+  sbcc/format/sbcc-cache.cpp
+  sbcc/format/sbcc-reader.cpp
+  sbcc/format/sbcc-writer.cpp
+)
+hphp_link(hphp_sbcc_format)
+
+add_executable(hphp_sbcc_compiler
+  sbcc/build/main.cpp
+  sbcc/build/sbcc-compiler.cpp
+  sbcc/build/sbcc-file-list.cpp
+  sbcc/build/sbcc-local.cpp
+)
+target_link_libraries(hphp_sbcc_compiler hphp_process_init)
+link_object_libraries(hphp_sbcc_compiler ${HHVM_WHOLE_ARCHIVE_LIBRARIES})
+set_target_properties(hphp_sbcc_compiler PROPERTIES OUTPUT_NAME sbcc-compiler)
+embed_sections(hphp_sbcc_compiler ${CMAKE_CURRENT_BINARY_DIR}/sbcc-compiler)
+HHVM_INSTALL(hphp_sbcc_compiler bin)
 
 set_property(
   DIRECTORY
