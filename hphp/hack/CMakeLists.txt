@@ -107,6 +107,9 @@ function(invoke_dune name target)
         $(MAKE) --makefile=Makefile.dune ${target}
         BYTECODE="${EMIT_OCAML_BYTECODE}"
       WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+      # Expose output from dune as it happens even if we're using Ninja.
+      # Since dune has parallelism of its own, this doesn't create a bottleneck.
+      USES_TERMINAL
     )
 
   add_dependencies(${name} rustc cargo zstd)
@@ -479,6 +482,7 @@ add_custom_target(
 )
 add_custom_target(hack_test DEPENDS hack_dune_test "${OPCODE_DATA}")
 
+set(NON_DUNE_CARGO_DIRECTORY ${DUNE_BUILD_DIR})
 configure_file(dev_env.sh.in dev_env.sh ESCAPE_QUOTES @ONLY)
 configure_file(dev_env_common.sh.in dev_env_common.sh ESCAPE_QUOTES @ONLY)
 configure_file(dev_env_rust_only.sh.in dev_env_rust_only.sh ESCAPE_QUOTES @ONLY)

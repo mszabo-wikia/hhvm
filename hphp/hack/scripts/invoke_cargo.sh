@@ -2,6 +2,7 @@
 set -e
 HACK_SOURCE_ROOT="${HACK_SOURCE_ROOT:-$HACKDIR}"
 HACK_BUILD_ROOT="${HACK_BUILD_ROOT:-$HACKDIR}"
+CARGO_BUILD_ROOT="${CARGO_BUILD_ROOT:-$HACK_BUILD_ROOT}"
 
 if [ -z "$HACK_SOURCE_ROOT" ]; then
    echo >&2 "ERROR: must set HACK_SOURCE_ROOT to point to hphp/hack source dir"
@@ -40,7 +41,7 @@ if [ -z "${HACK_NO_CARGO_VENDOR}" ]; then
 fi
 
 if [ -z "${TARGET_DIR}" ]; then
-  TARGET_DIR="${HACK_BUILD_ROOT}/target/$pkg"
+  TARGET_DIR="${CARGO_BUILD_ROOT}/target/$pkg"
 fi
 
 if [ -z ${HACKDEBUG+1} ]; then
