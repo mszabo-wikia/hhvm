@@ -1,0 +1,13 @@
+diff --git a/cmake/proxygen-config.cmake.in b/cmake/proxygen-config.cmake.in
+index bf1c50880..c8af298b5 100644
+--- a/cmake/proxygen-config.cmake.in
++++ b/cmake/proxygen-config.cmake.in
+@@ -32,7 +32,7 @@ find_dependency(Fizz)
+ find_dependency(ZLIB)
+ find_dependency(OpenSSL)
+ find_dependency(Threads)
+-find_dependency(c-ares REQUIRED)
++find_dependency(Cares REQUIRED)
+ 
+ if(NOT TARGET proxygen::proxygen)
+     include("${CMAKE_CURRENT_LIST_DIR}/proxygen-targets.cmake")

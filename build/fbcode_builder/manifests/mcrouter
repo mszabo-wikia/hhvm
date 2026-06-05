@@ -29,6 +29,7 @@ fbcode/mcrouter = mcrouter
 
 [build]
 builder = cmake
+patchfile = mcrouter-cmake.patch
 
 [build.os=windows]
 builder = nop
