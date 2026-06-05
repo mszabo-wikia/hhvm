@@ -1,0 +1,39 @@
+{
+  "version": 2,
+  "configurePresets": [
+    {
+      "name": "hhvm-clang",
+      "displayName": "HHVM Clang (RelWithDebInfo)",
+      "binaryDir": "${sourceDir}/_build",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/CMake/HPHPClangToolchain.cmake",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "GETDEPS_INSTALL_DIR": "${sourceDir}/../hhvm-deps/installed",
+        "USE_JEMALLOC": "ON",
+        "HPHP_ENABLE_HARDENING": "ON",
+        "NON_DISTRIBUTABLE_BUILD": "ON",
+        "ENABLE_XED": "Off",
+        "TEST_BIN": "On",
+        "MYSQL_UNIX_SOCK_ADDR": "/var/run/mysqld/mysqld.sock",
+        "ENABLE_EXTENSION_IMAGICK": "OFF",
+        "ENABLE_EXTENSION_MCRYPT": "Off",
+        "ENABLE_EXTENSION_XSL": "OFF",
+        "ENABLE_EXTENSION_SOAP": "OFF",
+        "ENABLE_EXTENSION_SNAPPY": "ON",
+        "ENABLE_EXTENSION_MCROUTER": "On",
+        "ENABLE_MCROUTER": "On",
+        "ENABLE_LD_GOLD": "Off",
+        "HPHP_FORCE_LIBCPP": "On"
+      }
+    },
+    {
+      "name": "hhvm-clang-debug",
+      "displayName": "HHVM Clang (Debug)",
+      "inherits": "hhvm-clang",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    }
+  ]
+}
