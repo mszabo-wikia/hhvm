@@ -11,4 +11,9 @@
 #  source $BUILD_DIR/hphp/hack/dev_env.sh
 
 . "@CMAKE_CURRENT_BINARY_DIR@/dev_env_common.sh"
+
+# Ensure Cargo builds spawned by Dune use a directory that's outside
+# the Hack root managed by Dune to avoid Dune removing their output mid-build.
+export CARGO_BUILD_ROOT="@NON_DUNE_CARGO_DIRECTORY@"
+
 eval $(opam env)
