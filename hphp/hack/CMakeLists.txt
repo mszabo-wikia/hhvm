@@ -58,6 +58,7 @@ add_custom_command(
     "${OPAM_EXECUTABLE}"
     "${DUNE_BUILD_DIR}"
     && cmake -E touch "${OPAM_STAMP_FILE}"
+  USES_TERMINAL
 )
 add_custom_target(opam_setup DEPENDS "${OPAM_STAMP_FILE}" opam_setup.sh)
 
