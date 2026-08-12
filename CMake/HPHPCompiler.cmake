@@ -105,6 +105,9 @@ if (HPHP_COMPILER_CLANG OR HPHP_COMPILER_GCC)
   if (IS_X64)
     list(APPEND GENERAL_CXX_OPTIONS "march=x86-64-v3")
     set(CMAKE_ASM_FLAGS  "${CMAKE_ASM_FLAGS} -march=x86-64-v3")
+  elseif(IS_AARCH64)
+    list(APPEND GENERAL_CXX_OPTIONS "march=armv8.2-a")
+    set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -march=armv8.2-a")
   endif()
 
   if (HPHP_COMPILER_CLANG) # using Clang
