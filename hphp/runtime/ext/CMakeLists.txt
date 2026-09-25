@@ -60,7 +60,7 @@ add_executable(hphp_sbcc_compiler
   sbcc/build/sbcc-local.cpp
 )
 hphp_link(hphp_sbcc_compiler)
-target_link_libraries(hphp_sbcc_compiler hphp_process_init)
+target_link_libraries(hphp_sbcc_compiler ${HHVM_LINK_LIBRARIES})
 link_object_libraries(hphp_sbcc_compiler ${HHVM_WHOLE_ARCHIVE_LIBRARIES})
 # tests expect sbcc-build to live under ext/sbcc
 set_target_properties(hphp_sbcc_compiler PROPERTIES
